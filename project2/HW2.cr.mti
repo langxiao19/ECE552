@@ -1,0 +1,26 @@
+C:/Users/langx/ECE552/wisc25-dist/project2/booth_tb1.v {1 {vlog -work work -stats=none C:/Users/langx/ECE552/wisc25-dist/project2/booth_tb1.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module booth_tb1
+
+Top level modules:
+	booth_tb1
+
+} {} {}} C:/Users/langx/ECE552/wisc25-dist/project2/booth_tb2.v {1 {vlog -work work -stats=none C:/Users/langx/ECE552/wisc25-dist/project2/booth_tb2.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module booth_tb2
+
+Top level modules:
+	booth_tb2
+
+} {} {}} C:/Users/langx/ECE552/wisc25-dist/project2/booth.v {1 {vlog -work work -stats=none C:/Users/langx/ECE552/wisc25-dist/project2/booth.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module booth
+-- Compiling module ALU
+-- Compiling module DFF
+-- Compiling module counter
+-- Compiling module parallel_to_serial
+
+Top level modules:
+	booth
+
+} {} {}}
