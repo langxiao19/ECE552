@@ -61,19 +61,12 @@ module hart_tb ();
     reg [7:0] dmem [0:1023];
 
     // Instruction memory read.
-    always @(*) begin
-        imem_rdata = {imem[imem_raddr + 3], imem[imem_raddr + 2], imem[imem_raddr + 1], imem[imem_raddr + 0]};
+    always @(posedge clk) begin
+        imem_rdata <= {imem[imem_raddr + 3], imem[imem_raddr + 2], imem[imem_raddr + 1], imem[imem_raddr + 0]};
     end
 
     // Data memory read. Masks are ignored since it is always safe
     // to access the full bytes in this memory.
-    // always @(*) begin
-    //     if (dmem_ren)
-    //         dmem_rdata = {dmem[dmem_addr + 3], dmem[dmem_addr + 2], dmem[dmem_addr + 1], dmem[dmem_addr + 0]};
-    //     else
-    //         dmem_rdata = 32'h0;
-    // end
-
     always @(posedge clk) begin
         if (dmem_ren)
             dmem_rdata <= {dmem[dmem_addr + 3], dmem[dmem_addr + 2], dmem[dmem_addr + 1], dmem[dmem_addr + 0]};
@@ -150,7 +143,7 @@ module hart_tb ();
                     run = 0;
             end
 
-            if (cycles > 10000) begin
+            if (cycles > 40000) begin
                 $display("Program did not halt after 10000 cycles, aborting.");
                 run = 0;
             end
@@ -162,7 +155,6 @@ module hart_tb ();
             $display("CPI: invalid (no instructions retired)");
         else
             $display("CPI: %f", cycles / (1.0 * num_instructions));
-        // $display("r[a0]=%08h (%d)", dut.rf.mem[10], dut.rf.mem[10]);
         $finish;
     end
 
