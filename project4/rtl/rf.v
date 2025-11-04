@@ -48,32 +48,66 @@ module rf #(
     input  wire [ 4:0] i_rd_waddr,
     input  wire [31:0] i_rd_wdata
 );
-    reg [31:0] registers [31:0];
     
+    // Internal Signals
+    wire        [31:0] ff_en;               //32-bit vector of enable signals to flip flops
+    wire        [31:0] ff_wr_data;          //32-bit width wires to connect write inputs to flip flops
+    wire        [31:0] mem[31:0];           //length 32 array of 32-bit width wires to connect read outputs to flip flops
+
+    // Generate instantiation of Flip Flops
+    genvar i;
+    generate
+        for (i = 1; i < 32; i=i+1) begin : gen_en_ffs
+            en_ff u_en_ff (.i_clk(i_clk), .i_rst(i_rst), .i_en(ff_en[i]), .i_wr_data(ff_wr_data), .o_rd_data(mem[i]));
+            // Logic for address to enable signals
+            assign ff_en[i] = (i_rd_wen && (i == i_rd_waddr)) ? 1'b1 : 1'b0;  //Note ff_en[0] has no real function, but we don't save any bits by getting rid of it
+        end
+    endgenerate
+
+    // Hard Coding logic for x0 register
+    assign mem[0] = 32'b0;
+
+    // Assign write input to addressing logic
+    assign ff_wr_data = i_rd_wdata;
+
+    // The following logic allows different instantiations based on if parameter BYPASS_EN is enabled
+    generate
+        if (BYPASS_EN) begin
+            assign o_rs1_rdata = ((i_rd_wen) && (i_rs1_raddr == i_rd_waddr)) ? i_rd_wdata : mem[i_rs1_raddr];
+            assign o_rs2_rdata = ((i_rd_wen) && (i_rs2_raddr == i_rd_waddr)) ? i_rd_wdata : mem[i_rs2_raddr];
+        end
+        else begin
+            assign o_rs1_rdata = mem[i_rs1_raddr];
+            assign o_rs2_rdata = mem[i_rs2_raddr];
+        end
+    endgenerate
+endmodule
+
+// Enable gated Flip Flop for register data storage
+module en_ff
+(
+    input wire          i_clk,      // Global clock
+    input wire          i_rst,      // Synchronous active-high reset
+    input wire          i_en,       // Write enable
+    input wire  [31:0]  i_wr_data,  // Write data
+    output wire [31:0]  o_rd_data   // Read data
+);
+    //Internal signals
+    reg         [31:0]  d_ff;       // Flip Flop for data storage
+
+    // Sequential Logic Block
     always @(posedge i_clk) begin
         if (i_rst) begin
-            integer i;
-            for (i = 0; i < 32; i = i + 1) begin
-                registers[i] <= 32'b0;
-            end
-        end else if (i_rd_wen && i_rd_waddr != 5'b0) begin
-            registers[i_rd_waddr] <= i_rd_wdata;
+            d_ff <= 32'b0;
         end
+        else if (i_en) begin
+            d_ff <= i_wr_data;
+        end
+        // Implied Else
     end
-    
-    wire [31:0] rs1_data_normal, rs2_data_normal;
-    wire [31:0] rs1_data_bypass, rs2_data_bypass;
-    
-    assign rs1_data_normal = (i_rs1_raddr == 5'b0) ? 32'b0 : registers[i_rs1_raddr];
-    assign rs2_data_normal = (i_rs2_raddr == 5'b0) ? 32'b0 : registers[i_rs2_raddr];
-    
-    assign rs1_data_bypass = (i_rd_wen && (i_rs1_raddr == i_rd_waddr) && (i_rd_waddr != 5'b0)) ? 
-                             i_rd_wdata : rs1_data_normal;
-    assign rs2_data_bypass = (i_rd_wen && (i_rs2_raddr == i_rd_waddr) && (i_rd_waddr != 5'b0)) ? 
-                             i_rd_wdata : rs2_data_normal;
-    
-    assign o_rs1_rdata = BYPASS_EN ? rs1_data_bypass : rs1_data_normal;
-    assign o_rs2_rdata = BYPASS_EN ? rs2_data_bypass : rs2_data_normal;
+
+    // Assign output wire to flip flop Q
+    assign o_rd_data = d_ff;
 
 endmodule
 

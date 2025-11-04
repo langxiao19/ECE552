@@ -1,0 +1,19 @@
+[Q0] The hardwired zero register should be ignored. It should always be 0 when you read register 0
+
+[Q1] The PC is not included because it needs special logic for it, it is automatically updated for each clock cycle and gets incremented by 4 for sequential logic instructions. IT would be a mess to be included in the register file and might lead to unwanted changes. 
+
+[Q2] We would need to change the register array size and the address width. For example to go from 32 registers to 64 we need 6 bit addresses instead of 5. The ISA instructions would also need more bits to specify different registers. This would need a different instruction format.
+
+[Q3] The immediate would be incorrect if we got the encoding wrong, then it would lead to the wrong offsets, constants or addresses we are trying to access. Then the program would be wrong. But for r-type instructions, they don't use immediates so it doesn't matter what the immediates are.
+
+[Q4] They don't specify imm[0] because these are the instruction for branch or jump where the target address must be multiples of 2 or 4 bytes. Hard coding it to 0 would ensure the correct alighments. It would be a waste of space if lower bits are specified since odd addresses don't work most of the times.
+
+[Q5] Because the complex immediate encodings in J and U type are designed to optimize the instruction encoding and also minimizes the complexity of the harware. THe immediate bits are arranged to minize the shifting and masking it needs in the hardware. So this wierd ordeing can allow more efficient hardware implementations that allows immediate bits to directly connect to output position.
+
+[Q6]The register file give sthe operands to the AlU. The immediate decoder gets the constants from the instruction. ALU does the calculations. instruction memory, data memory, the pc, control unit and other multiplexers are also needed.
+
+[Q7] Add a special multiplication part in the CPU. Also expand the ALU operations to account for multiplication. Add new opcodes to the ISA and update the instruction decoder to be able to do multiplication fast.
+
+[Q8] We can maybe change the register file to support half words write enables and sign extension on reads. ALso update the immediate encoder to handle 16 bits immediates. Adjust the ALu to work with 16 bit data. Also somewhere in the program we need to indicate that we are either working with 32 bit or 16 bit operations.
+
+I certify that my usage of LLMS is consitent with UW-Madison's academic integrity policies.

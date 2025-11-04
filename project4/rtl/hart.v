@@ -130,7 +130,139 @@ module hart #(
     ,`RVFI_OUTPUTS,
 `endif
 );
-    // Fill in your implementation here.
+    /* Internal Signals */
+    wire [31:0]              dmem_addr;     // Memory Address
+    wire [31:0]              dmem_wdata;    // Memory Write Data
+    wire [31:0]              dmem_rdata;    // Memory Read Data
+    wire [3:0]               dmem_mask;     // Memory Mask for store of sub-word Data
+
+    // Module Links
+    wire [31:0]             immediate;      // Immediate Value
+    wire                    _imm;           // Immediate Instruction Signal
+    wire [2:0]              opsel;          // ALU Operation Select
+    wire [31:0]             op1;            // ALU OP1 Value
+    wire [31:0]             op2;            // ALU OP2 Value
+    wire [31:0]             res;            // ALU Result
+    wire                    eq;             // ALU OP1 == OP2
+    wire                    slt;            // ALU OP1 < OP2
+
+    wire                    br_vld;         // Take Branch Signal
+    wire                    mem_reg;        // Write Memory Output to Register
+    wire                    auipc;          // Pass PC into OP1
+    wire                    sub;            // ALU Subtraction Control
+    wire                    unsign;         // ALU Unsigned Arith Control
+    wire                    arith;          // ALU Arith Shift Control
+    wire                    pass;           // ALU pass OP2 through to Output
+    wire                    mem;            // Memory Instruction Signal
+    wire                    jal;            // Jump Instruction Signal
+    wire                    jalr;           // Jalr Instruction Signal
+    wire                    rd_wen;         // Write Enable to Register File
+    wire [5:0]              format;         // Immediate Encoding Format
+
+    /* Instantiate Sub Modules */
+    /* See signal declarations for specifics on use */
+    // Immediate Encoder
+    imm  imm( .i_inst(i_imem_rdata), 
+                .i_format(format), 
+                .o_immediate(immediate));
+
+    // Memory handler (determines mask and aligns accesses)
+    dmem dmem(.i_opsel(opsel),
+                .i_dmem_addr(dmem_addr),
+                .i_rs2_rdata(o_retire_rs2_rdata),
+                .i_dmem_rdata(i_dmem_rdata),
+                .o_dmem_addr(o_dmem_addr),
+                .o_dmem_wdata(dmem_wdata),
+                .o_dmem_rdata(dmem_rdata),
+                .o_dmem_mask(dmem_mask));
+
+    // Register File
+    rf   rf(  .i_clk(i_clk), 
+                .i_rst(i_rst), 
+                .i_rs1_raddr(o_retire_rs1_raddr), 
+                .i_rs2_raddr(o_retire_rs2_raddr), 
+                .o_rs1_rdata(o_retire_rs1_rdata), 
+                .o_rs2_rdata(o_retire_rs2_rdata),
+                .i_rd_wen(rd_wen), 
+                .i_rd_waddr(o_retire_rd_waddr), 
+                .i_rd_wdata(o_retire_rd_wdata));
+
+    // Program Counter
+    pc   pc(  .i_clk(i_clk), 
+                .i_rst(i_rst), 
+                .i_br(br_vld), 
+                .i_jal(jal), 
+                .i_jalr(jalr),
+                .i_halt(o_retire_halt), 
+                .i_imm(immediate),
+                .i_rs1(o_retire_rs1_rdata),
+                .o_imem_raddr(o_imem_raddr),
+                .o_nxt_pc(o_retire_next_pc));
+
+    // Arithmetic Logic Unit
+    alu  alu( .i_opsel(opsel), 
+                .i_sub(sub), 
+                .i_unsigned(unsign), 
+                .i_arith(arith), 
+                .i_pass(pass), 
+                .i_mem(mem), 
+                .i_auipc(auipc),
+                .i_op1(op1), 
+                .i_op2(op2), 
+                .o_result(res), 
+                .o_eq(eq), 
+                .o_slt(slt));
+
+    // Control Unit
+    ctrl ctrl(.i_rst(i_rst),
+                .i_nxt_pc(o_retire_next_pc),
+                .i_dmem_addr(dmem_addr),
+                .i_imem_rdata(i_imem_rdata),
+                .i_immediate(immediate),
+                .o_mem_read(o_dmem_ren), 
+                .o_mem_reg(mem_reg), 
+                .o_mem_write(o_dmem_wen), 
+                .o_imm(_imm), 
+                .o_auipc(auipc), 
+                .o_break(o_retire_halt), 
+                .o_trap(o_retire_trap),
+                .o_opsel(opsel), 
+                .o_sub(sub), 
+                .o_unsigned(unsign), 
+                .o_arith(arith), 
+                .o_pass(pass), 
+                .o_mem(mem), 
+                .o_jal(jal),
+                .o_jalr(jalr),
+                .i_eq(eq),
+                .i_slt(slt),
+                .o_br_vld(br_vld), 
+                .o_rs1_raddr(o_retire_rs1_raddr), 
+                .o_rs2_raddr(o_retire_rs2_raddr), 
+                .o_rd_waddr(o_retire_rd_waddr), 
+                .o_rd_wen(rd_wen), 
+                .o_format(format));
+
+    // Assign HART Output Signals
+    assign o_dmem_wdata     = dmem_wdata;
+    assign o_dmem_mask      = dmem_mask;
+    assign o_retire_valid   = 1'b1;     //Tie high for Single Cycle
+    assign o_retire_inst    = i_imem_rdata;
+    assign o_retire_pc      = o_imem_raddr;
+
+    // Data being fed to ALU changes based on specific instruction
+    assign op1                  =   (auipc)         ?   o_retire_pc :   o_retire_rs1_rdata;
+    assign op2                  =   (_imm)          ?   immediate   :
+                                    (jal | jalr)    ?   32'd4       :       // When we are jumping, pc is loaded to op1
+                                                                            // So we need to store pc + 4 in rd
+                                                        o_retire_rs2_rdata;
+
+    // This is simply for readability, it has no effect on the system
+    assign dmem_addr =   res;
+
+    // Need to determine if we want to use ALU result or memory output
+    assign o_retire_rd_wdata    =   (mem_reg) ?   dmem_rdata : res;
+
 endmodule
 
 `default_nettype wire

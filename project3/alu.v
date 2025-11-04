@@ -44,7 +44,50 @@ module alu (
     // branch should be taken.
     output wire        o_slt
 );
-    // Fill in your implementation here.
+    wire [31:0] add_sub_result;
+    wire [31:0] sll_result;
+    wire [31:0] slt_result;
+    wire [31:0] xor_result;
+    wire [31:0] srl_sra_result;
+    wire [31:0] or_result;
+    wire [31:0] and_result;
+    
+    wire [31:0] op2_add_sub;
+    wire [4:0] shift_amount;
+    
+    assign op2_add_sub = i_sub ? (~i_op2 + 1) : i_op2;
+    assign add_sub_result = i_op1 + op2_add_sub;
+    
+    assign shift_amount = i_op2[4:0];
+    assign sll_result = i_op1 << shift_amount;
+    
+    wire slt_signed, slt_unsigned;
+    assign slt_signed = $signed(i_op1) < $signed(i_op2);
+    assign slt_unsigned = i_op1 < i_op2;
+    assign slt_result = {31'b0, i_unsigned ? slt_unsigned : slt_signed};
+    
+    assign xor_result = i_op1 ^ i_op2;
+    
+    wire [31:0] srl_result, sra_result;
+    assign srl_result = i_op1 >> shift_amount;
+    assign sra_result = $signed(i_op1) >>> shift_amount;
+    assign srl_sra_result = i_arith ? sra_result : srl_result;
+    
+    assign or_result = i_op1 | i_op2;
+    assign and_result = i_op1 & i_op2;
+    
+    assign o_result = (i_opsel == 3'b000) ? add_sub_result :
+                      (i_opsel == 3'b001) ? sll_result :
+                      (i_opsel == 3'b010 || i_opsel == 3'b011) ? slt_result :
+                      (i_opsel == 3'b100) ? xor_result :
+                      (i_opsel == 3'b101) ? srl_sra_result :
+                      (i_opsel == 3'b110) ? or_result :
+                      (i_opsel == 3'b111) ? and_result :
+                      32'b0;
+    
+    assign o_eq = (i_op1 == i_op2);
+    assign o_slt = i_unsigned ? slt_unsigned : slt_signed;
+
 endmodule
 
 `default_nettype wire
