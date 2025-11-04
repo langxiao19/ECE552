@@ -124,7 +124,14 @@ module hart #(
     // the next program counter after the instruction is retired. For most
     // instructions, this is `o_retire_pc + 4`, but must be the branch or jump
     // target for *taken* branches and jumps.
-    output wire [31:0] o_retire_next_pc
+    output wire [31:0] o_retire_next_pc,
+    // Memory interface for retiring instruction (for testbench verification)
+    output wire [31:0] o_retire_dmem_addr,
+    output wire        o_retire_dmem_ren,
+    output wire        o_retire_dmem_wen,
+    output wire [ 3:0] o_retire_dmem_mask,
+    output wire [31:0] o_retire_dmem_wdata,
+    output wire [31:0] o_retire_dmem_rdata
 
 `ifdef RISCV_FORMAL
     ,`RVFI_OUTPUTS,
@@ -136,6 +143,7 @@ module hart #(
     wire [31:0]             fe_nxt_pc;
     wire                    fe_vld;
     wire [31:0]             fe_pc;
+    wire                    fe_flush;
 
     // Decode
     wire                    de_mem_read;
@@ -219,9 +227,11 @@ module hart #(
     wire [4:0]              wb_rs2_raddr;
     wire [31:0]             wb_rs1_rdata;
     wire [31:0]             wb_rs2_rdata;
-    wire [31:0]             wb_rd_wdata;
     wire [31:0]             wb_pc;
     wire [31:0]             wb_nxt_pc;
+    
+    // wb_rd_wdata is same as wb_res (final result to write to register file)
+    wire [31:0]             wb_rd_wdata = wb_res;
 
     /* Instantiate Sub Modules */
     // Fetch stage
@@ -232,8 +242,10 @@ module hart #(
         .i_slt(ex_slt),
         .i_opsel(ex_opsel),
         .i_branch(ex_branch),
+        .i_ex_vld(ex_vld),
         .i_jal(de_jal),
         .i_jalr(de_jalr),
+        .i_de_vld(de_vld),
         .i_halt(de_break),
         .i_hold(de_hold),
         .i_immediate(de_immediate),
@@ -243,7 +255,8 @@ module hart #(
         .o_inst(fe_inst),
         .o_nxt_pc(fe_nxt_pc),
         .o_pc(fe_pc),
-        .o_vld(fe_vld)
+        .o_vld(fe_vld),
+        .o_flush(fe_flush)
     );
 
     // Decode stage
@@ -258,6 +271,12 @@ module hart #(
         .i_rd_waddr(wb_rd_waddr),
         .i_rd_wen(wb_rd_wen),
         .i_rd_wdata(wb_res),
+        .i_ex_rd_wen(ex_rd_wen),
+        .i_ex_rd_waddr(ex_rd_waddr),
+        .i_ex_mem_read(ex_mem_read),
+        .i_mem_rd_wen(mem_rd_wen),
+        .i_mem_rd_waddr(mem_rd_waddr),
+        .i_flush(fe_flush),
         .o_mem_read(de_mem_read),
         .o_mem_reg(de_mem_reg),
         .o_mem_write(de_mem_write),
@@ -320,6 +339,7 @@ module hart #(
         .i_branch(de_branch),
         .i_sub(de_sub),
         .i_unsigned(de_unsigned),
+        .i_arith(de_arith),
         .i_pass(de_pass),
         .i_mem(de_mem),
         .i_frwd_alu_op1(de_frwd_alu_op1),
@@ -427,6 +447,41 @@ module hart #(
     assign o_retire_rd_wdata    = wb_rd_wdata;
     assign o_retire_pc          = wb_pc;
     assign o_retire_next_pc     = wb_nxt_pc;
+    assign o_retire_trap        = de_trap;
+    
+    // Data memory control signals
+    assign o_dmem_ren           = ex_mem_read;
+    assign o_dmem_wen           = ex_mem_write;
+
+    // Retire memory interface signals (aligned to WB stage)
+    // Register the MEM interface signals so they line up with the retiring instruction
+    reg        wb_mem_write_r;
+    reg [31:0] wb_dmem_addr_r;
+    reg [ 3:0] wb_dmem_mask_r;
+    reg [31:0] wb_dmem_wdata_r;
+
+    always @(posedge i_clk) begin
+        if (i_rst) begin
+            wb_mem_write_r <= 1'b0;
+            wb_dmem_addr_r <= 32'h00000000;
+            wb_dmem_mask_r <= 4'b0000;
+            wb_dmem_wdata_r<= 32'h00000000;
+        end else begin
+            // Capture the MEM stage values for the instruction that will retire next cycle
+            wb_mem_write_r <= ex_mem_write;
+            wb_dmem_addr_r <= o_dmem_addr;
+            wb_dmem_mask_r <= o_dmem_mask;
+            wb_dmem_wdata_r<= o_dmem_wdata;
+        end
+    end
+
+    // Drive retire memory interface from WB-aligned registers
+    assign o_retire_dmem_addr   = wb_dmem_addr_r;
+    assign o_retire_dmem_ren    = mem_mem_reg;     // load indicator already WB-aligned
+    assign o_retire_dmem_wen    = wb_mem_write_r;  // store indicator WB-aligned
+    assign o_retire_dmem_mask   = wb_dmem_mask_r;
+    assign o_retire_dmem_wdata  = wb_dmem_wdata_r;
+    assign o_retire_dmem_rdata  = mem_dmem_rdata;  // load data WB-aligned via MEM stage
 endmodule
 
 `default_nettype wire

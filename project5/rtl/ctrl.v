@@ -63,12 +63,16 @@ wire opcode_allowed     = is_r_type | is_itype_alu | is_load | is_store | is_bra
                             | is_lui | is_auipc | is_jal | is_jalr | is_system;
 
 // PC always has to be 4-byte aligned
-wire pc_misaligned      = i_nxt_pc[1:0] != 2'b00;
+wire pc_misaligned;
+assign pc_misaligned = i_nxt_pc[1:0] != 2'b00;
 
 // Memory Accesses can be unaligned or 2-byte aligned for byte and half-word respectively
-wire byte               = funct3[1:0] == 2'b00;
-wire half_word          = funct3[0];
-wire dmem_misaligned    = o_mem & ((i_dmem_addr[0] & ~byte) | (i_dmem_addr[1] & ~half_word));
+wire is_byte;
+wire is_half_word;
+wire dmem_misaligned;
+assign is_byte = funct3[1:0] == 2'b00;
+assign is_half_word = funct3[0];
+assign dmem_misaligned = o_mem & ((i_dmem_addr[0] & ~is_byte) | (i_dmem_addr[1] & ~is_half_word));
 
 // Determine if instruction fields are valid
 // This logic is checking each possible instruction field combination to ensure correct encoding

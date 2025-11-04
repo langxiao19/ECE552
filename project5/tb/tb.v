@@ -60,6 +60,27 @@ module hart_tb ();
     reg [7:0] imem [0:1023];
     reg [7:0] dmem [0:1023];
 
+    // Utility: sanitize X/Z for nicer prints
+    function [31:0] clean32;
+        input [31:0] v;
+        begin
+            if (^v === 1'bx)
+                clean32 = 32'h00000000;
+            else
+                clean32 = v;
+        end
+    endfunction
+
+    function [4:0] clean5;
+        input [4:0] v;
+        begin
+            if (^v === 1'bx)
+                clean5 = 5'd0;
+            else
+                clean5 = v;
+        end
+    endfunction
+
     // Instruction memory read.
     always @(posedge clk) begin
         imem_rdata <= {imem[imem_raddr + 3], imem[imem_raddr + 2], imem[imem_raddr + 1], imem[imem_raddr + 0]};
@@ -89,17 +110,34 @@ module hart_tb ();
 
     integer cycles, run;
     integer num_instructions;
+    integer i;
+    integer dbg_cycles;
     initial begin
         clk = 1;
         rst = 0;
+        // Initialize read data regs to zero to avoid X on first cycles
+        imem_rdata = 32'h00000000;
+        dmem_rdata = 32'h00000000;
 
         // Open the waveform file.
         $dumpfile("hart.vcd");
         $dumpvars(0, hart_tb);
 
+    // Clear instruction and data memories to zero to avoid X when reading unused locations.
+        for (i = 0; i < 1024; i = i + 1) begin
+            imem[i] = 8'h00;
+            dmem[i] = 8'h00;
+        end
+
         // Load the test program into memory at address 0.
         $display("Loading program.");
         $readmemh("program.mem", imem);
+        // Peek first 16 bytes to confirm load
+        $write("IMEM[0..15]: ");
+        for (i = 0; i < 16; i = i + 1) begin
+            $write("%02h ", imem[i]);
+        end
+        $display("");
 
         // Reset the dut.
         $display("Resetting hart.");
@@ -107,33 +145,39 @@ module hart_tb ();
         @(negedge clk); rst = 0;
 
         $display("Cycle  PC        Inst     rs1            rs2            [rd, load, store]");
+        dbg_cycles = 0;
         cycles = 0;
         run = 1;
         num_instructions = 0;
         while (run) begin
             @(posedge clk);
             cycles = cycles + 1;
+            // Short-lived IF debug: show imem address and data for first 12 cycles
+            if (dbg_cycles < 12) begin
+                $display("IFDBG c%0d: raddr=%08h rdata=%08h", dbg_cycles, imem_raddr, imem_rdata);
+                dbg_cycles = dbg_cycles + 1;
+            end
 
             if (valid) begin
                 num_instructions = num_instructions + 1;
 
                 // Base information for all instructions.
                 if (inst[3:0] == 4'b0111 || inst[6:0] == 7'b111_0011 || inst[6:0] == 7'b110_1111)
-                    $write("[%08h] %08h r[xx]=xxxxxxxx r[xx]=xxxxxxxx", pc, inst);
+                    $write("[%08h] %08h r[xx]=xxxxxxxx r[xx]=xxxxxxxx", clean32(pc), clean32(inst));
                 else if (inst[6:0] == 7'b001_0011 || inst[6:0] == 7'b000_0011 ||
                           inst[6:0] == 7'b110_0111)
-                    $write("[%08h] %08h r[%d]=%08h r[xx]=xxxxxxxx", pc, inst, rs1_raddr, rs1_rdata);
+                    $write("[%08h] %08h r[%0d]=%08h r[xx]=xxxxxxxx", clean32(pc), clean32(inst), clean5(rs1_raddr), clean32(rs1_rdata));
                 else
-                    $write("[%08h] %08h r[%d]=%08h r[%d]=%08h", pc, inst, rs1_raddr, rs1_rdata, rs2_raddr, rs2_rdata);
+                    $write("[%08h] %08h r[%0d]=%08h r[%0d]=%08h", clean32(pc), clean32(inst), clean5(rs1_raddr), clean32(rs1_rdata), clean5(rs2_raddr), clean32(rs2_rdata));
 
                 // Only display write information for instructions that write.
                 if (rd_waddr != 5'd0)
-                    $write(" w[%d]=%08h", rd_waddr, rd_wdata);
+                    $write(" w[%0d]=%08h", clean5(rd_waddr), clean32(rd_wdata));
                 // Only display memory information for load/store instructions.
                 if (retire_dmem_ren)
-                    $write(" l[%08h,%04b]=%08h", retire_dmem_addr, retire_dmem_mask, retire_dmem_rdata);
+                    $write(" l[%08h,%04b]=%08h", clean32(retire_dmem_addr), retire_dmem_mask, clean32(retire_dmem_rdata));
                 if (retire_dmem_wen)
-                    $write(" s[%08h,%04b]=%08h", retire_dmem_addr, retire_dmem_mask, retire_dmem_wdata);
+                    $write(" s[%08h,%04b]=%08h", clean32(retire_dmem_addr), retire_dmem_mask, clean32(retire_dmem_wdata));
                 // Display trap information if a trap occurred.
                 if (trap)
                     $write(" TRAP");

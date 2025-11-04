@@ -28,6 +28,7 @@ module ex
     input  wire         i_branch,
     input  wire         i_sub,
     input  wire         i_unsigned,
+    input  wire         i_arith,
     input  wire         i_pass,
     input  wire         i_mem,
 
@@ -38,7 +39,7 @@ module ex
 
     input wire [31:0]      i_inst,
     input wire [4:0]       i_rs1_raddr,
-    output wire [4:0]      i_rs2_raddr,
+    input wire [4:0]       i_rs2_raddr,
     input wire [31:0]      i_nxt_pc,
 
     output wire         o_slt,
@@ -86,6 +87,7 @@ module ex
     reg [31:0]   rs2_rdata_ff;
     reg [31:0]   pc_ff;
     reg [31:0]   nxt_pc_ff;
+    reg          branch_ff;
 
     // Arithmetic Logic Unit Operand Selection (forwarding unit)
     frwd frwd( .i_auipc(i_auipc),
@@ -127,24 +129,42 @@ module ex
             vld_ff       <= 1'b0;
             mem_read_ff  <= 1'b0;
             mem_write_ff <= 1'b0;
+            res_ff        <= 32'h00000000;
+            opsel_ff      <= 3'b000;
+            mem_reg_ff    <= 1'b0;
+            dmem_addr_ff  <= 32'h00000000;
+            dmem_wdata_ff <= 32'h00000000;
+            rd_waddr_ff   <= 5'd0;
+            rd_wen_ff     <= 1'b0;
+            branch_ff     <= 1'b0;
+            inst_ff       <= 32'h00000013; // NOP (ADDI x0,x0,0)
+            rs1_raddr_ff  <= 5'd0;
+            rs2_raddr_ff  <= 5'd0;
+            rs1_rdata_ff  <= 32'h00000000;
+            rs2_rdata_ff  <= 32'h00000000;
+            pc_ff         <= 32'h00000000;
+            nxt_pc_ff     <= 32'h00000000;
         end
-        res_ff           <= res;
-        opsel_ff         <= i_opsel;
-        mem_reg_ff       <= i_mem_reg;
-        mem_read_ff      <= i_mem_read;
-        mem_write_ff     <= i_mem_write;
-        dmem_addr_ff     <= res;
-        dmem_wdata_ff    <= op2;
-        rd_waddr_ff      <= i_rd_waddr;
-        rd_wen_ff        <= i_rd_wen;
-        vld_ff           <= i_vld;
-        inst_ff          <= i_inst;
-        rs1_raddr_ff     <= i_rs1_raddr;
-        rs2_raddr_ff     <= i_rs2_raddr;
-        rs1_rdata_ff     <= i_rs1_rdata;
-        rs2_rdata_ff     <= i_rs1_rdata;
-        pc_ff            <= i_pc;
-        nxt_pc_ff        <= i_nxt_pc;
+        else begin
+            vld_ff           <= i_vld;
+            mem_read_ff      <= i_mem_read;
+            mem_write_ff     <= i_mem_write;
+            res_ff           <= res;
+            opsel_ff         <= i_opsel;
+            mem_reg_ff       <= i_mem_reg;
+            dmem_addr_ff     <= res;
+            dmem_wdata_ff    <= op2;
+            rd_waddr_ff      <= i_rd_waddr;
+            rd_wen_ff        <= i_rd_wen;
+            branch_ff        <= i_branch;
+            inst_ff          <= i_inst;
+            rs1_raddr_ff     <= i_rs1_raddr;
+            rs2_raddr_ff     <= i_rs2_raddr;
+            rs1_rdata_ff     <= i_rs1_rdata;
+            rs2_rdata_ff     <= i_rs2_rdata;
+            pc_ff            <= i_pc;
+            nxt_pc_ff        <= i_nxt_pc;
+        end
     end
 
     // Assign wires to register
@@ -157,12 +177,13 @@ module ex
     assign o_dmem_wdata    = dmem_wdata_ff;
     assign o_rd_waddr      = rd_waddr_ff;
     assign o_rd_wen        = rd_wen_ff;
+    assign o_branch        = branch_ff;
     assign o_vld           = vld_ff;
     assign o_inst          = inst_ff;
     assign o_rs1_raddr     = rs1_raddr_ff;
     assign o_rs2_raddr     = rs2_raddr_ff;
     assign o_rs1_rdata     = rs1_rdata_ff;
-    assign o_rs2_rdata     = rs1_rdata_ff;
+    assign o_rs2_rdata     = rs2_rdata_ff;
     assign o_pc            = pc_ff;
     assign o_nxt_pc        = nxt_pc_ff;
 

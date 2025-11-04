@@ -72,4 +72,12 @@ assign nxt_addr         = (br_vld | i_jal)    ? curr_addr + i_immediate :   //In
 assign o_imem_raddr = curr_addr;
 assign o_nxt_pc     = nxt_addr;
 
+// Always-not-taken branch predictor:
+// Flush pipeline if branch/jump is actually taken (misprediction)
+// For branches: flush if br_vld is true (branch taken)
+// For jumps (JAL/JALR): always taken, so always flush
+assign o_flush = br_vld | i_jal | i_jalr;
+
 endmodule
+
+`default_nettype wire

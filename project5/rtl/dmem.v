@@ -16,22 +16,25 @@ module dmem(
     output wire [3:0]       o_dmem_mask     // Memory access mask
 );
     /* Internal wires to ease readability */
-    wire byte       =   i_opsel[1:0] == 2'b00;
-    wire half_word  =   i_opsel[0];
-    wire zero_ext   =   i_opsel[2];
+    wire is_byte;
+    wire is_half_word;
+    wire zero_ext;
+    assign is_byte = i_opsel[1:0] == 2'b00;
+    assign is_half_word = i_opsel[0];
+    assign zero_ext = i_opsel[2];
 
     /* Masking Block (Used for sub-word load/store) */
     // Mask incoming or outgoing data to only hold desired data length
     // The WISC25 SPEC says we aren't doing unaligned memory accesses, but the gradescope tests test it, so we need
     //      to ensure using aligned address
     // Only consider valid alignment, if bit0 of addr is set a trap will occur
-    assign o_dmem_mask =    (byte &  (i_dmem_addr[1:0] == 2'b00))   ? 4'b0001 :    //  4-byte alligned
-                            (byte &  (i_dmem_addr[1:0] == 2'b01))   ? 4'b0010 :    //  Unaligned
-                            (byte &  (i_dmem_addr[1:0] == 2'b10))   ? 4'b0100 :    //  2-byte alligned
-                            (byte &  (i_dmem_addr[1:0] == 2'b11))   ? 4'b1000 :    //  Unaligned
-                            (half_word & ~i_dmem_addr[1])           ? 4'b0011 :    //  4-byte alligned
-                            (half_word &  i_dmem_addr[1])           ? 4'b1100 :    //  2-byte alligned
-                                                                      4'b1111;     //  Default full word
+    assign o_dmem_mask =    (is_byte &  (i_dmem_addr[1:0] == 2'b00))   ? 4'b0001 :    //  4-byte alligned
+                            (is_byte &  (i_dmem_addr[1:0] == 2'b01))   ? 4'b0010 :    //  Unaligned
+                            (is_byte &  (i_dmem_addr[1:0] == 2'b10))   ? 4'b0100 :    //  2-byte alligned
+                            (is_byte &  (i_dmem_addr[1:0] == 2'b11))   ? 4'b1000 :    //  Unaligned
+                            (is_half_word & ~i_dmem_addr[1])           ? 4'b0011 :    //  4-byte alligned
+                            (is_half_word &  i_dmem_addr[1])           ? 4'b1100 :    //  2-byte alligned
+                                                                         4'b1111;     //  Default full word
     
     // Always access data at 4-byte aligned address
     // So we can use mask to read specific part of data word

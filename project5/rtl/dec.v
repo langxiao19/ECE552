@@ -22,6 +22,18 @@ module dec
     input  wire [4:0]   i_rd_waddr,
     input  wire         i_rd_wen,
     input  wire [31:0]  i_rd_wdata,
+    
+    // Hazard detection inputs from EX stage
+    input  wire         i_ex_rd_wen,
+    input  wire [4:0]   i_ex_rd_waddr,
+    input  wire         i_ex_mem_read,
+    
+    // Hazard detection inputs from MEM stage
+    input  wire         i_mem_rd_wen,
+    input  wire [4:0]   i_mem_rd_waddr,
+    
+    // Flush signal from EX stage (branch/jump taken)
+    input  wire         i_flush,
 
     // Control outputs
     output wire             o_mem_read,     // Asserted if reading from memory
@@ -80,7 +92,7 @@ module dec
     wire        mem_write;    // Asserted if writing to memory
     wire        imm;          // Asserted on immediate instruction
     wire        auipc;        // Asserted if pc needs to be loaded to rs1
-    wire        break;        // Asserted on break instruction
+    wire        brk;          // Asserted on break instruction (ebreak)
     wire        trap;         // Asserted if invalid instruction given
     wire        branch;       // Asserted if branch instruction
     wire [2:0]  opsel;        // Operation select (funct3)
@@ -102,7 +114,7 @@ module dec
     reg         mem_write_ff;
     reg         imm_ff;
     reg         auipc_ff;
-    reg         break_ff;
+    reg         brk_ff;
     reg         trap_ff;
     reg         branch_ff;
     reg [2:0]   opsel_ff;
@@ -147,8 +159,14 @@ module dec
     (
                 .i_clk(i_clk),
                 .i_rst(i_rst),
-                .i_rd_wen(rd_wen),
-                .i_rd_waddr(rd_waddr),
+                .i_id_vld(i_vld),
+                .i_rs1_raddr(rs1_raddr),
+                .i_rs2_raddr(rs2_raddr),
+                .i_ex_rd_wen(i_ex_rd_wen),
+                .i_ex_rd_waddr(i_ex_rd_waddr),
+                .i_ex_mem_read(i_ex_mem_read),
+                .i_mem_rd_wen(i_mem_rd_wen),
+                .i_mem_rd_waddr(i_mem_rd_waddr),
                 .o_if_id_halt(if_id_hold),
                 .o_id_ex_halt(id_ex_hold),
                 .o_frwd_alu_op1(o_frwd_alu_op1),
@@ -165,11 +183,11 @@ module dec
                 .i_immediate(immediate),
                 .o_mem_read(mem_read), 
                 .o_mem_reg(mem_reg), 
-                .o_mem_write(dmem_wen), 
+                .o_mem_write(mem_write), 
                 .o_imm(imm), 
                 .o_auipc(auipc), 
-                .o_break(retire_halt), 
-                .o_trap(retire_trap),
+                .o_break(brk), 
+                .o_trap(trap),
                 .o_branch(branch),
                 .o_opsel(opsel), 
                 .o_sub(sub), 
@@ -192,14 +210,26 @@ module dec
             vld_ff           <= 1'b0;
             mem_read_ff      <= 1'b0;
             mem_write_ff     <= 1'b0;
-        end
-        if (!id_ex_hold) begin
+            rd_wen_ff        <= 1'b0;
+        end else if (i_flush || id_ex_hold) begin
+            // Insert bubble (NOP) on flush or stall - clear all control signals that cause side effects
+            mem_read_ff      <= 1'b0;
+            mem_reg_ff       <= 1'b0;
+            mem_write_ff     <= 1'b0;
+            rd_wen_ff        <= 1'b0;  // Don't write to register file
+            vld_ff           <= 1'b0;  // Mark instruction as invalid
+            branch_ff        <= 1'b0;  // Don't branch
+            brk_ff           <= 1'b0;  // Don't break
+            trap_ff          <= 1'b0;  // Don't trap
+            jal_ff           <= 1'b0;
+            jalr_ff          <= 1'b0;
+        end else begin
             mem_read_ff      <= mem_read;
             mem_reg_ff       <= mem_reg;
             mem_write_ff     <= mem_write;
             imm_ff           <= imm;
             auipc_ff         <= auipc;
-            break_ff         <= break;
+            brk_ff           <= brk;
             trap_ff          <= trap;
             branch_ff        <= branch;
             opsel_ff         <= opsel;
@@ -222,7 +252,6 @@ module dec
             pc_ff            <= i_pc;
             nxt_pc_ff        <= i_nxt_pc;
         end
-        // Implied else hold
     end
 
     // Assign hold output 
@@ -234,7 +263,7 @@ module dec
     assign o_mem_write     = mem_write_ff;
     assign o_imm           = imm_ff;
     assign o_auipc         = auipc_ff;
-    assign o_break         = break_ff;
+    assign o_break         = brk_ff;
     assign o_trap          = trap_ff;
     assign o_branch        = branch_ff;
     assign o_opsel         = opsel_ff;
