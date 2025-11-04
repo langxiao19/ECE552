@@ -1,0 +1,102 @@
+C:/Work/ECE552/wisc25-dist/project5/rtl/ex.v {1 {vlog -work work -stats=none C:/Work/ECE552/wisc25-dist/project5/rtl/ex.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module ex
+
+Top level modules:
+	ex
+
+} {} {}} C:/Work/ECE552/wisc25-dist/project5/rtl/rf.v {1 {vlog -work work -stats=none C:/Work/ECE552/wisc25-dist/project5/rtl/rf.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module rf
+-- Compiling module en_ff
+
+Top level modules:
+	rf
+
+} {} {}} C:/Work/ECE552/wisc25-dist/project5/rtl/hzrd.v {1 {vlog -work work -stats=none C:/Work/ECE552/wisc25-dist/project5/rtl/hzrd.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module hzrd
+
+Top level modules:
+	hzrd
+
+} {} {}} C:/Work/ECE552/wisc25-dist/project5/rtl/alu.v {1 {vlog -work work -stats=none C:/Work/ECE552/wisc25-dist/project5/rtl/alu.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module alu
+-- Compiling module l_shifter
+-- Compiling module r_shifter
+
+Top level modules:
+	alu
+
+} {} {}} C:/Work/ECE552/wisc25-dist/project5/rtl/dmem.v {1 {vlog -work work -stats=none C:/Work/ECE552/wisc25-dist/project5/rtl/dmem.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module dmem
+
+Top level modules:
+	dmem
+
+} {} {}} C:/Work/ECE552/wisc25-dist/project5/rtl/frwd.v {1 {vlog -work work -stats=none C:/Work/ECE552/wisc25-dist/project5/rtl/frwd.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module frwd
+
+Top level modules:
+	frwd
+
+} {} {}} C:/Work/ECE552/wisc25-dist/project5/rtl/dec.v {1 {vlog -work work -stats=none C:/Work/ECE552/wisc25-dist/project5/rtl/dec.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module dec
+
+Top level modules:
+	dec
+
+} {} {}} C:/Work/ECE552/wisc25-dist/project5/rtl/ctrl.v {1 {vlog -work work -stats=none C:/Work/ECE552/wisc25-dist/project5/rtl/ctrl.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module ctrl
+
+Top level modules:
+	ctrl
+
+} {} {}} C:/Work/ECE552/wisc25-dist/project5/rtl/fet.v {1 {vlog -work work -stats=none C:/Work/ECE552/wisc25-dist/project5/rtl/fet.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module fet
+
+Top level modules:
+	fet
+
+} {} {}} C:/Work/ECE552/wisc25-dist/project5/rtl/hart.v {1 {vlog -work work -stats=none C:/Work/ECE552/wisc25-dist/project5/rtl/hart.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module hart
+
+Top level modules:
+	hart
+
+} {} {}} C:/Work/ECE552/wisc25-dist/project5/rtl/mem.v {1 {vlog -work work -stats=none C:/Work/ECE552/wisc25-dist/project5/rtl/mem.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module mem
+
+Top level modules:
+	mem
+
+} {} {}} C:/Work/ECE552/wisc25-dist/project5/rtl/wb.v {1 {vlog -work work -stats=none C:/Work/ECE552/wisc25-dist/project5/rtl/wb.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module wb
+
+Top level modules:
+	wb
+
+} {} {}} C:/Work/ECE552/wisc25-dist/project5/rtl/imm.v {1 {vlog -work work -stats=none C:/Work/ECE552/wisc25-dist/project5/rtl/imm.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module imm
+
+Top level modules:
+	imm
+
+} {} {}} C:/Work/ECE552/wisc25-dist/project5/rtl/pc.v {1 {vlog -work work -stats=none C:/Work/ECE552/wisc25-dist/project5/rtl/pc.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module pc
+
+Top level modules:
+	pc
+
+} {} {}}
