@@ -17,11 +17,7 @@ module hart #(
     // 32-bit read address for the instruction memory. This is expected to be
     // 4 byte aligned - that is, the two LSBs should be zero.
     output wire [31:0] o_imem_raddr,
-    // Instruction word fetched from memory, available synchronously after
-    // the next clock edge.
-    // NOTE: This is different from the previous phase. To accomodate a
-    // multi-cycle pipelined design, the instruction memory read is
-    // now synchronous.
+    // Instruction word fetched from memory, available on the same cycle.
     input  wire [31:0] i_imem_rdata,
     // Data memory accesses go through a separate read/write data memory (dmem)
     // that is shared between read (load) and write (stored). The port accepts
@@ -64,7 +60,7 @@ module hart #(
     // word right by 16 bits and sign/zero extend as appropriate.
     //
     // To perform a byte write at address 0x00002003, align `o_dmem_addr` to
-    // `0x00002000`, assert `o_dmem_wen`, and set the mask to 0b1000 to
+    // `0x00002003`, assert `o_dmem_wen`, and set the mask to 0b1000 to
     // indicate that only the upper byte should be written. On the next clock
     // cycle, the upper byte of `o_dmem_wdata` will be written to memory, with
     // the other three bytes of the aligned word unaffected. Remember to shift
@@ -72,13 +68,9 @@ module hart #(
     // appropriate byte lane.
     output wire [ 3:0] o_dmem_mask,
     // The 32-bit word read from data memory. When `o_dmem_ren` is asserted,
-    // after the next clock edge, this will reflect the contents of memory
-    // at the specified address, for the bytes enabled by the mask. When
-    // read enable is not asserted, or for bytes not set in the mask, the
-    // value is undefined.
-    // NOTE: This is different from the previous phase. To accomodate a
-    // multi-cycle pipelined design, the data memory read is
-    // now synchronous.
+    // this will immediately reflect the contents of memory at the specified
+    // address, for the bytes enabled by the mask. When read enable is not
+    // asserted, or for bytes not set in the mask, the value is undefined.
     input  wire [31:0] i_dmem_rdata,
 	// The output `retire` interface is used to signal to the testbench that
     // the CPU has completed and retired an instruction. A single cycle
@@ -126,32 +118,6 @@ module hart #(
     // writeback stage by this instruction. If rd is 5'd0, this field is
     // ignored and can be treated as a don't care.
     output wire [31:0] o_retire_rd_wdata,
-    // The following data memory retire interface is used to record the
-    // memory transactions completed by the instruction being retired.
-    // As such, it mirrors the transactions happening on the main data
-    // memory interface (o_dmem_* and i_dmem_*) but is delayed to match
-    // the retirement of the instruction. You can hook this up by just
-    // registering the main dmem interface signals into the writeback
-    // stage of your pipeline.
-    //
-    // All these fields are don't-care for instructions that do not
-    // access data memory (o_retire_dmem_ren and o_retire_dmem_wen
-    // not asserted).
-    // NOTE: This interface is new for phase 5 in order to account for
-    // the delay between data memory accesses and instruction retire.
-    //
-    // The 32-bit data memory address accessed by the instruction.
-    output wire [31:0] o_retire_dmem_addr,
-    // The byte masked used for the data memory access.
-    output wire [ 3:0] o_retire_dmem_mask,
-    // Asserted if the instruction performed a read (load) from data memory.
-    output wire        o_retire_dmem_ren,
-    // Asserted if the instruction performed a write (store) to data memory.
-    output wire        o_retire_dmem_wen,
-    // The 32-bit data read from memory by a load instruction.
-    output wire [31:0] o_retire_dmem_rdata,
-    // The 32-bit data written to memory by a store instruction.
-    output wire [31:0] o_retire_dmem_wdata,
     // The current program counter of the instruction being retired - i.e.
     // the instruction memory address that the instruction was fetched from.
     output wire [31:0] o_retire_pc,
@@ -164,7 +130,303 @@ module hart #(
     ,`RVFI_OUTPUTS,
 `endif
 );
-    // Fill in your implementation here.
+    // For specifics on what each signal means look at control unit
+    // Fetch
+    wire [31:0]             fe_inst;
+    wire [31:0]             fe_nxt_pc;
+    wire                    fe_vld;
+    wire [31:0]             fe_pc;
+
+    // Decode
+    wire                    de_mem_read;
+    wire                    de_mem_reg;
+    wire                    de_mem_write;
+    wire                    de_imm;
+    wire                    de_auipc;
+    wire                    de_break;
+    wire                    de_trap;
+    wire                    de_branch;
+    wire [2:0]              de_opsel;
+    wire                    de_sub;
+    wire                    de_unsigned;
+    wire                    de_arith;
+    wire                    de_pass;
+    wire                    de_mem;
+    wire                    de_jal;
+    wire                    de_jalr;
+    wire [31:0]             de_immediate;
+    wire [4:0]              de_rd_waddr;
+    wire                    de_rd_wen;
+    wire [31:0]             de_rs1_rdata;
+    wire [31:0]             de_rs2_rdata;
+    wire                    de_vld;
+    wire                    de_hold;
+    wire                    de_frwd_alu_op1;
+    wire                    de_frwd_mem_op1;
+    wire                    de_frwd_alu_op2;
+    wire                    de_frwd_mem_op2;
+    wire [31:0]             de_inst;
+    wire [4:0]              de_rs1_raddr;
+    wire [4:0]              de_rs2_raddr;
+    wire [31:0]             de_pc;
+    wire [31:0]             de_nxt_pc;
+
+    // Execute
+    wire                    ex_slt;
+    wire                    ex_eq;
+    wire [31:0]             ex_res;
+    wire                    ex_mem_reg;
+    wire                    ex_mem_read;
+    wire                    ex_mem_write;
+    wire [2:0]              ex_opsel;
+    wire [4:0]              ex_rd_waddr;
+    wire                    ex_rd_wen;
+    wire                    ex_branch;
+    wire [31:0]             ex_dmem_addr;
+    wire [31:0]             ex_dmem_wdata;
+    wire                    ex_vld;
+    wire [31:0]             ex_inst;
+    wire [4:0]              ex_rs1_raddr;
+    wire [4:0]              ex_rs2_raddr;
+    wire [31:0]             ex_rs1_rdata;
+    wire [31:0]             ex_rs2_rdata;
+    wire [31:0]             ex_pc;
+    wire [31:0]             ex_nxt_pc;
+
+    // Memory
+    wire                    mem_mem_reg;
+    wire [31:0]             mem_res;
+    wire [31:0]             mem_dmem_rdata;
+    wire [4:0]              mem_rd_waddr;
+    wire                    mem_rd_wen;
+    wire                    mem_vld;
+    wire [31:0]             mem_inst;
+    wire [4:0]              mem_rs1_raddr;
+    wire [4:0]              mem_rs2_raddr;
+    wire [31:0]             mem_rs1_rdata;
+    wire [31:0]             mem_rs2_rdata;
+    wire [31:0]             mem_rd_wdata;
+    wire [31:0]             mem_pc;
+    wire [31:0]             mem_nxt_pc;
+
+    // Write-Back
+    wire [31:0]             wb_res;
+    wire [4:0]              wb_rd_waddr;
+    wire                    wb_rd_wen;
+    wire                    wb_vld;
+    wire [31:0]             wb_inst;
+    wire [4:0]              wb_rs1_raddr;
+    wire [4:0]              wb_rs2_raddr;
+    wire [31:0]             wb_rs1_rdata;
+    wire [31:0]             wb_rs2_rdata;
+    wire [31:0]             wb_rd_wdata;
+    wire [31:0]             wb_pc;
+    wire [31:0]             wb_nxt_pc;
+
+    /* Instantiate Sub Modules */
+    // Fetch stage
+    fet u_fet(
+        .i_clk(i_clk),
+        .i_rst(i_rst),
+        .i_eq(ex_eq),
+        .i_slt(ex_slt),
+        .i_opsel(ex_opsel),
+        .i_branch(ex_branch),
+        .i_jal(de_jal),
+        .i_jalr(de_jalr),
+        .i_halt(de_break),
+        .i_hold(de_hold),
+        .i_immediate(de_immediate),
+        .i_rs1(de_rs1_rdata),
+        .o_imem_raddr(o_imem_raddr),
+        .i_imem_rdata(i_imem_rdata),
+        .o_inst(fe_inst),
+        .o_nxt_pc(fe_nxt_pc),
+        .o_pc(fe_pc),
+        .o_vld(fe_vld)
+    );
+
+    // Decode stage
+    dec u_dec(
+        .i_clk(i_clk),
+        .i_rst(i_rst),
+        .i_nxt_pc(fe_nxt_pc),
+        .i_vld(fe_vld),
+        .i_pc(fe_pc),
+        .i_inst(fe_inst),
+        .i_dmem_addr(ex_dmem_addr),
+        .i_rd_waddr(wb_rd_waddr),
+        .i_rd_wen(wb_rd_wen),
+        .i_rd_wdata(wb_res),
+        .o_mem_read(de_mem_read),
+        .o_mem_reg(de_mem_reg),
+        .o_mem_write(de_mem_write),
+        .o_imm(de_imm),
+        .o_auipc(de_auipc),
+        .o_break(de_break),
+        .o_trap(de_trap),
+        .o_branch(de_branch),
+        .o_opsel(de_opsel),
+        .o_sub(de_sub),
+        .o_unsigned(de_unsigned),
+        .o_arith(de_arith),
+        .o_pass(de_pass),
+        .o_mem(de_mem),
+        .o_jal(de_jal),
+        .o_jalr(de_jalr),
+        .o_immediate(de_immediate),
+        .o_rd_waddr(de_rd_waddr),
+        .o_rd_wen(de_rd_wen),
+        .o_rs1_rdata(de_rs1_rdata),
+        .o_rs2_rdata(de_rs2_rdata),
+        .o_vld(de_vld),
+        .o_hold(de_hold),
+        .o_frwd_alu_op1(de_frwd_alu_op1),
+        .o_frwd_mem_op1(de_frwd_mem_op1),
+        .o_frwd_alu_op2(de_frwd_alu_op2),
+        .o_frwd_mem_op2(de_frwd_mem_op2),
+        .o_inst(de_inst),
+        .o_rs1_raddr(de_rs1_raddr),
+        .o_rs2_raddr(de_rs2_raddr),
+        .o_pc(de_pc),
+        .o_nxt_pc(de_nxt_pc)
+    );
+
+    // Execute stage
+    ex u_ex(
+        .i_clk(i_clk),
+        .i_rst(i_rst),
+        .i_vld(de_vld),
+        .i_auipc(de_auipc),
+        .i_imm(de_imm),
+        .i_jalr(de_jalr),
+        .i_jal(de_jal),
+        .i_mem_reg(de_mem_reg),
+        .i_mem_read(de_mem_read),
+        .i_mem_write(de_mem_write),
+        .i_pc(de_pc),
+        .i_nxt_pc(de_nxt_pc),
+        .i_inst(de_inst),
+        .i_rs1_rdata(de_rs1_rdata),
+        .i_rs2_rdata(de_rs2_rdata),
+        .i_rs1_raddr(de_rs1_raddr),
+        .i_rs2_raddr(de_rs2_raddr),
+        .i_alu_res(ex_res),
+        .i_mem_res(mem_dmem_rdata),
+        .i_immediate(de_immediate),
+        .i_opsel(de_opsel),
+        .i_rd_waddr(de_rd_waddr),
+        .i_rd_wen(de_rd_wen),
+        .i_branch(de_branch),
+        .i_sub(de_sub),
+        .i_unsigned(de_unsigned),
+        .i_pass(de_pass),
+        .i_mem(de_mem),
+        .i_frwd_alu_op1(de_frwd_alu_op1),
+        .i_frwd_mem_op1(de_frwd_mem_op1),
+        .i_frwd_alu_op2(de_frwd_alu_op2),
+        .i_frwd_mem_op2(de_frwd_mem_op2),
+        .o_slt(ex_slt),
+        .o_eq(ex_eq),
+        .o_res(ex_res),
+        .o_mem_reg(ex_mem_reg),
+        .o_mem_read(ex_mem_read),
+        .o_mem_write(ex_mem_write),
+        .o_opsel(ex_opsel),
+        .o_rd_waddr(ex_rd_waddr),
+        .o_rd_wen(ex_rd_wen),
+        .o_branch(ex_branch),
+        .o_dmem_addr(ex_dmem_addr),
+        .o_dmem_wdata(ex_dmem_wdata),
+        .o_vld(ex_vld),
+        .o_inst(ex_inst),
+        .o_rs1_raddr(ex_rs1_raddr),
+        .o_rs2_raddr(ex_rs2_raddr),
+        .o_rs1_rdata(ex_rs1_rdata),
+        .o_rs2_rdata(ex_rs2_rdata),
+        .o_pc(ex_pc),
+        .o_nxt_pc(ex_nxt_pc)
+    );
+
+    // Memory stage
+    mem u_mem(
+        .i_clk(i_clk),
+        .i_rst(i_rst),
+        .i_vld(ex_vld),
+        .i_inst(ex_inst),
+        .i_rs1_raddr(ex_rs1_raddr),
+        .i_rs2_raddr(ex_rs2_raddr),
+        .i_rs1_rdata(ex_rs1_rdata),
+        .i_rs2_rdata(ex_rs2_rdata),
+        .i_pc(ex_pc),
+        .i_nxt_pc(ex_nxt_pc),
+        .i_opsel(ex_opsel),
+        .i_rd_waddr(ex_rd_waddr),
+        .i_rd_wen(ex_rd_wen),
+        .i_dmem_addr(ex_dmem_addr),
+        .i_dmem_wdata(ex_dmem_wdata),
+        .i_dmem_rdata(i_dmem_rdata),
+        .i_mem_reg(ex_mem_reg),
+        .i_res(ex_res),
+        .o_mem_reg(mem_mem_reg),
+        .o_res(mem_res),
+        .o_rd_waddr(mem_rd_waddr),
+        .o_rd_wen(mem_rd_wen),
+        .o_dmem_rdata(mem_dmem_rdata),
+        .o_dmem_addr(o_dmem_addr),
+        .o_dmem_wdata(o_dmem_wdata),
+        .o_dmem_mask(o_dmem_mask),
+        .o_vld(mem_vld),
+        .o_inst(mem_inst),
+        .o_rs1_raddr(mem_rs1_raddr),
+        .o_rs2_raddr(mem_rs2_raddr),
+        .o_rs1_rdata(mem_rs1_rdata),
+        .o_rs2_rdata(mem_rs2_rdata),
+        .o_pc(mem_pc),
+        .o_nxt_pc(mem_nxt_pc)
+    );
+
+    // Write-back stage
+    wb u_wb(
+        .i_rst(i_rst),
+        .i_mem_reg(mem_mem_reg),
+        .i_dmem_rdata(mem_dmem_rdata),
+        .i_res(mem_res),
+        .i_rd_waddr(mem_rd_waddr),
+        .i_rd_wen(mem_rd_wen),
+        .i_vld(mem_vld),
+        .i_inst(mem_inst),
+        .i_rs1_raddr(mem_rs1_raddr),
+        .i_rs2_raddr(mem_rs2_raddr),
+        .i_rs1_rdata(mem_rs1_rdata),
+        .i_rs2_rdata(mem_rs2_rdata),
+        .i_pc(mem_pc),
+        .i_nxt_pc(mem_nxt_pc),
+        .o_res(wb_res),
+        .o_rd_waddr(wb_rd_waddr),
+        .o_rd_wen(wb_rd_wen),
+        .o_vld(wb_vld),
+        .o_inst(wb_inst),
+        .o_rs1_raddr(wb_rs1_raddr),
+        .o_rs2_raddr(wb_rs2_raddr),
+        .o_rs1_rdata(wb_rs1_rdata),
+        .o_rs2_rdata(wb_rs2_rdata),
+        .o_pc(wb_pc),
+        .o_nxt_pc(wb_nxt_pc)
+    );
+
+    // Assign HART Output Signals
+    assign o_retire_valid       = wb_vld;
+    assign o_retire_inst        = wb_inst;
+    assign o_retire_halt        = de_break;
+    assign o_retire_rs1_raddr   = wb_rs1_raddr;
+    assign o_retire_rs2_raddr   = wb_rs2_raddr;
+    assign o_retire_rs1_rdata   = wb_rs1_rdata;
+    assign o_retire_rs2_rdata   = wb_rs2_rdata;
+    assign o_retire_rd_waddr    = wb_rd_waddr;
+    assign o_retire_rd_wdata    = wb_rd_wdata;
+    assign o_retire_pc          = wb_pc;
+    assign o_retire_next_pc     = wb_nxt_pc;
 endmodule
 
 `default_nettype wire
