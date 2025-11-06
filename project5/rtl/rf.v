@@ -1,4 +1,4 @@
-`default_nettype none
+﻿`default_nettype none
 
 // The register file is effectively a single cycle memory with 32-bit words
 // and depth 32. It has two asynchronous read ports, allowing two independent
@@ -73,8 +73,8 @@ module rf #(
     // The following logic allows different instantiations based on if parameter BYPASS_EN is enabled
     generate
         if (BYPASS_EN) begin
-            assign o_rs1_rdata = ((i_rd_wen) && (i_rs1_raddr == i_rd_waddr)) ? i_rd_wdata : mem[i_rs1_raddr];
-            assign o_rs2_rdata = ((i_rd_wen) && (i_rs2_raddr == i_rd_waddr)) ? i_rd_wdata : mem[i_rs2_raddr];
+            assign o_rs1_rdata = ((i_rd_wen) && (i_rs1_raddr == i_rd_waddr) && (i_rs1_raddr != 5'd0)) ? i_rd_wdata : mem[i_rs1_raddr];
+            assign o_rs2_rdata = ((i_rd_wen) && (i_rs2_raddr == i_rd_waddr) && (i_rs2_raddr != 5'd0)) ? i_rd_wdata : mem[i_rs2_raddr];
         end
         else begin
             assign o_rs1_rdata = mem[i_rs1_raddr];

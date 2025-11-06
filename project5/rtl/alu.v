@@ -1,4 +1,4 @@
-`default_nettype none
+﻿`default_nettype none
 
 // The arithmetic logic unit (ALU) is responsible for performing the core
 // calculations of the processor. It takes two 32-bit operands and outputs

@@ -1,4 +1,4 @@
-`default_nettype none
+﻿`default_nettype none
 
 /**
 *   Program Counter Module
@@ -18,8 +18,7 @@ module pc #(
     input wire          i_eq,           // OP1 and OP2 Equal
     input wire          i_slt,          // OP1 < OP2
     input wire [2:0]    i_opsel,        // Branch opsel
-    input wire          i_branch,       // Current Instruction is branch
-
+    input wire          i_branch,    // Instruction in EX stage is branch
     
     // Asserts if we want to load a specific address into the pc (jump)
     input wire          i_jal,
@@ -29,7 +28,8 @@ module pc #(
 
     /* Address Signals */
     // Immediate value used for Branch and Jump
-    input wire  [31:0]  i_immediate,
+    input wire  [31:0]  i_immediate_de, // From decode stage
+    input wire  [31:0]  i_immediate_ex, // From execute stage
     //RS1 input for jalr instruction
     input wire  [31:0]  i_rs1,
     // Next instruction address to execute
@@ -47,37 +47,32 @@ reg  [31:0] curr_addr;
 
 /* PC holding FF */
 always @(posedge i_clk) begin
-    if (i_rst)
+    if (i_rst) begin
         curr_addr <= RESET_ADDR;
-    else if (i_halt)
-        curr_addr <= curr_addr;  // Hold PC on Halt
-    else
+    end
+    else if (i_jal | i_jalr | br_vld)
+        curr_addr <= nxt_addr + 3'd4;
+    else if (!i_halt)  // Hold PC on Halt
         curr_addr <= nxt_addr;
+    // Implied else hold
 end
 
 /* Determine Branch validity */
-// B-Type
-assign br_vld       = i_branch &  ((i_eq   & (i_opsel == 3'b000)) | (~i_eq & (i_opsel == 3'b001)) | // Need to invert result if bne taken
-                                    (i_slt  & ((i_opsel == 3'b100) | (i_opsel == 3'b110))) |         // If Less Than instruction
-                                    (~i_slt & ((i_opsel == 3'b101) | (i_opsel == 3'b111))));         // If Greater Than or Equal
+assign br_vld       = i_branch    & ((i_eq   & (i_opsel == 3'b000)) | (~i_eq & (i_opsel == 3'b001)) | // Need to invert result if bne taken
+                                     (i_slt  & ((i_opsel == 3'b100) | (i_opsel == 3'b110))) |         // If Less Than instruction
+                                     (~i_slt & ((i_opsel == 3'b101) | (i_opsel == 3'b111))));         // If Greater Than or Equal
 
 /* Logic to determine next addr */
-wire [31:0] jalr_v      = i_rs1 + i_immediate;
-assign nxt_addr         = (br_vld | i_jal)    ? curr_addr + i_immediate :   //In this case we branch based offset, if taking this instruction
-                                                                            //        immediate is always aligned so no need to fix here
-                          (i_jalr)          ? {jalr_v[31:1], 1'b0} :        //Need to clear lsb to ensure aligned
-                                               curr_addr + 3'd4;            //In this case we increment PC by one instruction (default)
+wire [31:0] jalr_v      = i_rs1 + i_immediate_de;
+assign nxt_addr         = (br_vld)          ? curr_addr + i_immediate_ex - 3'd4 :   //In this case we branch based offset, if taking this instruction
+                                                                                    //        immediate is always aligned so no need to fix here
+                          (i_jal)           ? curr_addr + i_immediate_de - 3'd4 :
+                          (i_jalr)          ? {jalr_v[31:1], 1'b0} :                //Need to clear lsb to ensure aligned
+                                               curr_addr + 3'd4;                    //In this case we increment PC by one instruction (default)
 
 /* Link output wire */
-assign o_imem_raddr = curr_addr;
+assign o_imem_raddr = (i_jal | i_jalr | br_vld) ? nxt_addr : curr_addr;
 assign o_nxt_pc     = nxt_addr;
-
-// Always-not-taken branch predictor:
-// Flush pipeline if branch/jump is actually taken (misprediction)
-// For branches: flush if br_vld is true (branch taken)
-// For jumps (JAL/JALR): always taken, so always flush
-assign o_flush = br_vld | i_jal | i_jalr;
+assign o_flush      = br_vld;  // Flush if branch valid
 
 endmodule
-
-`default_nettype wire

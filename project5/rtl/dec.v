@@ -1,4 +1,4 @@
-/**
+﻿/**
 *   Decode Stage
 */
 
@@ -14,6 +14,9 @@ module dec
     input  wire         i_vld,
     input  wire [31:0]  i_pc,
 
+    // Flush Register
+    input wire          i_flush,
+
     // Instruction data
     input  wire [31:0]  i_inst,
     input  wire [31:0]  i_dmem_addr,
@@ -22,18 +25,11 @@ module dec
     input  wire [4:0]   i_rd_waddr,
     input  wire         i_rd_wen,
     input  wire [31:0]  i_rd_wdata,
-    
-    // Hazard detection inputs from EX stage
-    input  wire         i_ex_rd_wen,
-    input  wire [4:0]   i_ex_rd_waddr,
-    input  wire         i_ex_mem_read,
-    
-    // Hazard detection inputs from MEM stage
-    input  wire         i_mem_rd_wen,
-    input  wire [4:0]   i_mem_rd_waddr,
-    
-    // Flush signal from EX stage (branch/jump taken)
-    input  wire         i_flush,
+
+    // Forward inputs
+    input wire [31:0]   i_ex_alu_res,
+    input wire [31:0]   i_mem_alu_res,
+    input wire [31:0]   i_mem_res,
 
     // Control outputs
     output wire             o_mem_read,     // Asserted if reading from memory
@@ -54,23 +50,21 @@ module dec
     output wire             o_mem,          // Asserted on load/store instruction
     output wire             o_jal,          // Asserted on jump instruction
     output wire             o_jalr,         // Asserted on jalr instruction
+    output wire             o_jal_ff,
+    output wire             o_jalr_ff,
     output wire [31:0]      o_immediate,    // Immediate value
+    output wire [31:0]      o_immediate_ff, 
 
     // Register Control
     output wire [ 4:0]      o_rd_waddr,     // RD address (inst[11:7])
     output wire             o_rd_wen,       // Asserted when writing to register file
+    output wire [31:0]      o_jalr_rs1,     // Current RS1 data for jalr
     output wire [31:0]      o_rs1_rdata,    // RS1 Data
     output wire [31:0]      o_rs2_rdata,    // RS2 Data
 
     // Instruction Valid
     output wire             o_vld,
     output wire             o_hold,
-
-    // Forwarding Signals
-    output wire          o_frwd_alu_op1, //forward from alu result op1
-    output wire          o_frwd_mem_op1, //forward from memory result op1
-    output wire          o_frwd_alu_op2, //forward from alu result op2
-    output wire          o_frwd_mem_op2, //forward from memory result op2
 
     // Pipelining debug signals
     output wire [31:0]      o_inst,
@@ -81,6 +75,7 @@ module dec
 );
 
     // Internal Signals
+    wire [31:0] inst;         // Instruction
     wire [31:0] immediate;    // Immediate value
     wire [ 4:0] rs1_raddr;    // RS1 address (inst[19:15])
     wire [ 4:0] rs2_raddr;    // RS2 address (inst[24:20])
@@ -92,7 +87,7 @@ module dec
     wire        mem_write;    // Asserted if writing to memory
     wire        imm;          // Asserted on immediate instruction
     wire        auipc;        // Asserted if pc needs to be loaded to rs1
-    wire        brk;          // Asserted on break instruction (ebreak)
+    wire        break;        // Asserted on break instruction
     wire        trap;         // Asserted if invalid instruction given
     wire        branch;       // Asserted if branch instruction
     wire [2:0]  opsel;        // Operation select (funct3)
@@ -107,6 +102,15 @@ module dec
     wire [4:0]  rd_waddr;     // Register file address to write to for current instruction
     wire        if_id_hold;   // Hold IF/ID register
     wire        id_ex_hold;   // Hold ID/EX register
+    // Forwarding Signals
+    wire        frwd_alu_op1;       //forward from alu result op1
+    wire        frwd_mem_alu_op1;   //forward from mem alu res op1
+    wire        frwd_mem_op1;       //forward from memory result op1
+    wire        frwd_alu_op2;       //forward from alu result op2
+    wire        frwd_mem_alu_op2;   //forward from mem alu res op2
+    wire        frwd_mem_op2;       //forward from memory result op2
+    wire [31:0] op1;                // Op1 passed to ALU
+    wire [31:0] op2;                // Op2 passed to ALU
 
     /* Registers for Pipeline */
     reg         mem_read_ff;
@@ -114,7 +118,7 @@ module dec
     reg         mem_write_ff;
     reg         imm_ff;
     reg         auipc_ff;
-    reg         brk_ff;
+    reg         break_ff;
     reg         trap_ff;
     reg         branch_ff;
     reg [2:0]   opsel_ff;
@@ -136,9 +140,17 @@ module dec
     reg [4:0]   rs2_raddr_ff;
     reg [31:0]  pc_ff;
     reg [31:0]  nxt_pc_ff;
+    reg         wait_ff;    //on reset need to hold noop for a cycle
+
+    // Ensure we can flush the instruction to add x0 x0 x0
+    assign inst = (i_flush | wait_ff) ? 32'h00000033 : i_inst;
+
+    // Also pass jal and jalr for fe stage
+    assign o_jal  = (!vld_ff) ? 1'b0 : jal;
+    assign o_jalr = (!vld_ff) ? 1'b0 : jalr;
 
     // Immediate Encoder
-    imm  u_imm( .i_inst(i_inst), 
+    imm  u_imm( .i_inst(inst), 
                 .i_format(format), 
                 .o_immediate(immediate));
 
@@ -159,34 +171,55 @@ module dec
     (
                 .i_clk(i_clk),
                 .i_rst(i_rst),
-                .i_id_vld(i_vld),
+                .i_rd_wen(rd_wen),
+                .i_rd_waddr(rd_waddr),
                 .i_rs1_raddr(rs1_raddr),
                 .i_rs2_raddr(rs2_raddr),
-                .i_ex_rd_wen(i_ex_rd_wen),
-                .i_ex_rd_waddr(i_ex_rd_waddr),
-                .i_ex_mem_read(i_ex_mem_read),
-                .i_mem_rd_wen(i_mem_rd_wen),
-                .i_mem_rd_waddr(i_mem_rd_waddr),
+                .i_is_load(mem_read),
                 .o_if_id_halt(if_id_hold),
                 .o_id_ex_halt(id_ex_hold),
-                .o_frwd_alu_op1(o_frwd_alu_op1),
-                .o_frwd_mem_op1(o_frwd_mem_op1),
-                .o_frwd_alu_op2(o_frwd_alu_op2),
-                .o_frwd_mem_op2(o_frwd_mem_op2)
+                .o_frwd_alu_op1(frwd_alu_op1),
+                .o_frwd_mem_alu_op1(frwd_mem_alu_op1),
+                .o_frwd_mem_op1(frwd_mem_op1),
+                .o_frwd_alu_op2(frwd_alu_op2),
+                .o_frwd_mem_alu_op2(frwd_mem_alu_op2),
+                .o_frwd_mem_op2(frwd_mem_op2)
     );
+
+    // Arithmetic Logic Unit Operand Selection (forwarding unit)
+    frwd frwd( .i_auipc(auipc),
+                .i_imm(imm),
+                .i_jal(jal),
+                .i_jalr(jalr),
+                .i_mem_reg(mem_reg),
+                .i_pc(i_pc),
+                .i_rs1_rdata(rs1_rdata),
+                .i_rs2_rdata(rs2_rdata),
+                .i_ex_alu_res(i_ex_alu_res),
+                .i_mem_alu_res(i_mem_alu_res),
+                .i_mem_res(i_mem_res),
+                .i_immediate(immediate),
+                .i_frwd_alu_op1(frwd_alu_op1),
+                .i_frwd_mem_alu_op1(frwd_mem_alu_op1),
+                .i_frwd_mem_op1(frwd_mem_op1),
+                .i_frwd_alu_op2(frwd_alu_op2),
+                .i_frwd_mem_alu_op2(frwd_mem_alu_op2),
+                .i_frwd_mem_op2(frwd_mem_op2),
+                .o_op1(op1),
+                .o_op2(op2));
 
     // Control Unit
     ctrl u_ctrl(.i_rst(i_rst),
                 .i_nxt_pc(i_nxt_pc),
                 .i_dmem_addr(i_dmem_addr),
-                .i_imem_rdata(i_inst),
+                .i_imem_rdata(inst),
                 .i_immediate(immediate),
                 .o_mem_read(mem_read), 
                 .o_mem_reg(mem_reg), 
                 .o_mem_write(mem_write), 
                 .o_imm(imm), 
                 .o_auipc(auipc), 
-                .o_break(brk), 
+                .o_break(break), 
                 .o_trap(trap),
                 .o_branch(branch),
                 .o_opsel(opsel), 
@@ -205,31 +238,48 @@ module dec
 
     // ID/EX register
     always @(posedge i_clk) begin
-        // Only need reset for certain signals
+        // Reset to no-op add x0 x0 x0
         if (i_rst) begin
             vld_ff           <= 1'b0;
             mem_read_ff      <= 1'b0;
             mem_write_ff     <= 1'b0;
-            rd_wen_ff        <= 1'b0;
-        end else if (i_flush || id_ex_hold) begin
-            // Insert bubble (NOP) on flush or stall - clear all control signals that cause side effects
-            mem_read_ff      <= 1'b0;
+            branch_ff        <= 1'b0;
+            opsel_ff         <= 3'b000;
+            inst_ff          <= 32'h00000033;
+            trap_ff          <= 1'b0;
+            break_ff         <= 1'b0;
+            wait_ff          <= 1'b1;
             mem_reg_ff       <= 1'b0;
-            mem_write_ff     <= 1'b0;
-            rd_wen_ff        <= 1'b0;  // Don't write to register file
-            vld_ff           <= 1'b0;  // Mark instruction as invalid
-            branch_ff        <= 1'b0;  // Don't branch
-            brk_ff           <= 1'b0;  // Don't break
-            trap_ff          <= 1'b0;  // Don't trap
+            imm_ff           <= 1'b0;
+            auipc_ff         <= 1'b0;
+            sub_ff           <= 1'b0;
+            unsigned_ff      <= 1'b0;
+            arith_ff         <= 1'b0;
+            pass_ff          <= 1'b0;
+            mem_ff           <= 1'b0;
             jal_ff           <= 1'b0;
             jalr_ff          <= 1'b0;
-        end else begin
+            rd_waddr_ff      <= 5'd0;
+            rd_wen_ff        <= 1'b1;
+            rs1_rdata_ff     <= 32'd0;
+            rs2_rdata_ff     <= 32'd0;
+            immediate_ff     <= 32'd0;
+            rs1_raddr_ff     <= 5'd0;
+            rs2_raddr_ff     <= 5'd0;
+        end
+        else if (i_flush) begin
+            vld_ff           <= 1'b0;
+        end
+        else begin
+            wait_ff          <= 1'b0;
+        end
+        if (!id_ex_hold) begin
             mem_read_ff      <= mem_read;
             mem_reg_ff       <= mem_reg;
             mem_write_ff     <= mem_write;
             imm_ff           <= imm;
             auipc_ff         <= auipc;
-            brk_ff           <= brk;
+            break_ff         <= break;
             trap_ff          <= trap;
             branch_ff        <= branch;
             opsel_ff         <= opsel;
@@ -242,16 +292,17 @@ module dec
             jalr_ff          <= jalr;
             rd_waddr_ff      <= rd_waddr;
             rd_wen_ff        <= rd_wen;
-            rs1_rdata_ff     <= rs1_rdata;
-            rs2_rdata_ff     <= rs2_rdata;
+            rs1_rdata_ff     <= op1;
+            rs2_rdata_ff     <= op2;
             immediate_ff     <= immediate;
             vld_ff           <= i_vld;
-            inst_ff          <= i_inst;
+            inst_ff          <= inst;
             rs1_raddr_ff     <= rs1_raddr;
             rs2_raddr_ff     <= rs2_raddr;
             pc_ff            <= i_pc;
             nxt_pc_ff        <= i_nxt_pc;
         end
+        // Implied else hold
     end
 
     // Assign hold output 
@@ -263,7 +314,7 @@ module dec
     assign o_mem_write     = mem_write_ff;
     assign o_imm           = imm_ff;
     assign o_auipc         = auipc_ff;
-    assign o_break         = brk_ff;
+    assign o_break         = break_ff;
     assign o_trap          = trap_ff;
     assign o_branch        = branch_ff;
     assign o_opsel         = opsel_ff;
@@ -272,13 +323,15 @@ module dec
     assign o_arith         = arith_ff;
     assign o_pass          = pass_ff;
     assign o_mem           = mem_ff;
-    assign o_jal           = jal_ff;
-    assign o_jalr          = jalr_ff;
+    assign o_jal_ff        = jal_ff;
+    assign o_jalr_ff       = jalr_ff;
     assign o_rd_waddr      = rd_waddr_ff;
     assign o_rd_wen        = rd_wen_ff;
+    assign o_jalr_rs1      = op1;
     assign o_rs1_rdata     = rs1_rdata_ff;
     assign o_rs2_rdata     = rs2_rdata_ff;
-    assign o_immediate     = immediate_ff;
+    assign o_immediate_ff  = immediate_ff;
+    assign o_immediate     = immediate;
     assign o_vld           = vld_ff;
     assign o_inst          = inst_ff;
     assign o_rs1_raddr     = rs1_raddr_ff;
