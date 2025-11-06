@@ -109,20 +109,7 @@ module mem
     assign o_dmem_rdata = dmem_rdata_if;
     assign o_dmem_mask  = dmem_mask_if;
 
-    // Retire-path mask computed strictly from the MEM-stage instruction (EX-stage opsel)
-    wire [3:0] dmem_mask_mem;
-    wire [31:0] _unused_addr_mem;
-    wire [31:0] _unused_wdata_mem;
-    wire [31:0] _unused_rdata_mem;
-    dmem dmem_ret(
-                .i_opsel(i_opsel_r),
-                .i_dmem_addr(i_dmem_addr),
-                .i_rs2_rdata(i_dmem_wdata),
-                .i_dmem_rdata(i_dmem_rdata),
-                .o_dmem_addr(_unused_addr_mem),
-                .o_dmem_wdata(_unused_wdata_mem),
-                .o_dmem_rdata(_unused_rdata_mem),
-                .o_dmem_mask(dmem_mask_mem));
+    // Retire path uses the actual interface mask captured and pipelined to WB
 
     // MEM/WB Register
     always @(posedge i_clk) begin
@@ -146,11 +133,11 @@ module mem
             rs1_rdata_ff     <= i_rs1_rdata;
             rs2_rdata_ff     <= i_rs2_rdata;
             dmem_addr_ff     <= o_dmem_addr;
-            // Capture the MEM-stage instruction's mask for retire logging
-            dmem_mask_ff     <= dmem_mask_mem;
+            // Capture the interface mask (the one used for the actual memory transaction)
+            dmem_mask_ff     <= o_dmem_mask;
             // Pipeline the address/mask to align with the instruction in MEM/WB stage
             dmem_addr_ff1    <= dmem_addr_ff;
-            // Retire/logging mask is simply the MEM-stage mask registered one cycle later
+            // Retire/logging mask is the interface mask registered one cycle later
             dmem_mask_ff1    <= dmem_mask_ff;
             dmem_ren_ff      <= i_dmem_ren_ff;
             dmem_wen_ff      <= i_dmem_wen_ff;
