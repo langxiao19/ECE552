@@ -1,4 +1,4 @@
-﻿/**
+/**
 *   Decode Stage
 */
 
@@ -146,8 +146,8 @@ module dec
     assign inst = (i_flush | wait_ff) ? 32'h00000033 : i_inst;
 
     // Also pass jal and jalr for fe stage
-    assign o_jal  = (!vld_ff) ? 1'b0 : jal;
-    assign o_jalr = (!vld_ff) ? 1'b0 : jalr;
+    assign o_jal  = (!i_vld) ? 1'b0 : jal;
+    assign o_jalr = (!i_vld) ? 1'b0 : jalr;
 
     // Immediate Encoder
     imm  u_imm( .i_inst(inst), 
@@ -267,9 +267,6 @@ module dec
             rs1_raddr_ff     <= 5'd0;
             rs2_raddr_ff     <= 5'd0;
         end
-        else if (i_flush) begin
-            vld_ff           <= 1'b0;
-        end
         else begin
             wait_ff          <= 1'b0;
         end
@@ -302,6 +299,33 @@ module dec
             pc_ff            <= i_pc;
             nxt_pc_ff        <= i_nxt_pc;
         end
+        if (id_ex_hold | i_flush) begin
+            vld_ff           <= 1'b0;
+            mem_read_ff      <= 1'b0;
+            mem_write_ff     <= 1'b0;
+            branch_ff        <= 1'b0;
+            opsel_ff         <= 3'b000;
+            inst_ff          <= 32'h00000033;
+            trap_ff          <= 1'b0;
+            break_ff         <= 1'b0;
+            mem_reg_ff       <= 1'b0;
+            imm_ff           <= 1'b0;
+            auipc_ff         <= 1'b0;
+            sub_ff           <= 1'b0;
+            unsigned_ff      <= 1'b0;
+            arith_ff         <= 1'b0;
+            pass_ff          <= 1'b0;
+            mem_ff           <= 1'b0;
+            jal_ff           <= 1'b0;
+            jalr_ff          <= 1'b0;
+            rd_waddr_ff      <= 5'd0;
+            rd_wen_ff        <= 1'b1;
+            rs1_rdata_ff     <= 32'd0;
+            rs2_rdata_ff     <= 32'd0;
+            immediate_ff     <= 32'd0;
+            rs1_raddr_ff     <= 5'd0;
+            rs2_raddr_ff     <= 5'd0;
+        end
         // Implied else hold
     end
 
@@ -327,7 +351,7 @@ module dec
     assign o_jalr_ff       = jalr_ff;
     assign o_rd_waddr      = rd_waddr_ff;
     assign o_rd_wen        = rd_wen_ff;
-    assign o_jalr_rs1      = op1;
+    assign o_jalr_rs1      = rs1_rdata;
     assign o_rs1_rdata     = rs1_rdata_ff;
     assign o_rs2_rdata     = rs2_rdata_ff;
     assign o_immediate_ff  = immediate_ff;
