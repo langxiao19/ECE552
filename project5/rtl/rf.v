@@ -1,4 +1,4 @@
-﻿`default_nettype none
+`default_nettype none
 
 // The register file is effectively a single cycle memory with 32-bit words
 // and depth 32. It has two asynchronous read ports, allowing two independent

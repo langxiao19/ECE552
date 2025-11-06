@@ -1,4 +1,4 @@
-﻿`default_nettype none
+`default_nettype none
 
 /**
 *   Program Counter Module
@@ -25,6 +25,7 @@ module pc #(
     input wire          i_jalr,
     // Asserts if processor needs to halt
     input wire          i_halt,
+    input wire          i_hold,
 
     /* Address Signals */
     // Immediate value used for Branch and Jump
@@ -50,9 +51,9 @@ always @(posedge i_clk) begin
     if (i_rst) begin
         curr_addr <= RESET_ADDR;
     end
-    else if (i_jal | i_jalr | br_vld)
+    else if (br_vld | i_jal | i_jalr)
         curr_addr <= nxt_addr + 3'd4;
-    else if (!i_halt)  // Hold PC on Halt
+    else if (!i_halt & !i_hold)  // Hold PC on Halt or stall
         curr_addr <= nxt_addr;
     // Implied else hold
 end
@@ -64,14 +65,16 @@ assign br_vld       = i_branch    & ((i_eq   & (i_opsel == 3'b000)) | (~i_eq & (
 
 /* Logic to determine next addr */
 wire [31:0] jalr_v      = i_rs1 + i_immediate_de;
-assign nxt_addr         = (br_vld)          ? curr_addr + i_immediate_ex - 3'd4 :   //In this case we branch based offset, if taking this instruction
+assign nxt_addr         = (br_vld)          ? curr_addr + i_immediate_ex - 4'd8 :   //In this case we branch based offset, if taking this instruction
                                                                                     //        immediate is always aligned so no need to fix here
                           (i_jal)           ? curr_addr + i_immediate_de - 3'd4 :
                           (i_jalr)          ? {jalr_v[31:1], 1'b0} :                //Need to clear lsb to ensure aligned
                                                curr_addr + 3'd4;                    //In this case we increment PC by one instruction (default)
 
 /* Link output wire */
-assign o_imem_raddr = (i_jal | i_jalr | br_vld) ? nxt_addr : curr_addr;
+assign o_imem_raddr = (i_jal | i_jalr | br_vld) ? nxt_addr : 
+                      (i_hold)                  ? curr_addr - 3'd4 : 
+                                                  curr_addr;
 assign o_nxt_pc     = nxt_addr;
 assign o_flush      = br_vld;  // Flush if branch valid
 

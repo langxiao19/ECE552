@@ -1,4 +1,4 @@
-﻿/**
+/**
 *   Write Back Stage
 */
 
