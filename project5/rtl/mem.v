@@ -94,9 +94,9 @@ module mem
     // but ensure retire/logging uses the correctly pipelined mask below.
     assign o_dmem_wen = i_dmem_wen;
     assign o_dmem_ren = i_dmem_ren;
-    // Select opsel for combinational dmem based on whether this cycle is a write or read request
-    // Note: retire/logging will use the pipelined mask/value aligned to MEM stage.
-    assign opsel      = (o_dmem_wen) ? i_opsel_w : i_opsel_r;
+    // Select opsel aligned with the instruction in MEM stage using EX-stage latched enables
+    // to avoid mixing DE-stage control. Stores use write opsel, loads use read opsel.
+    assign opsel      = (i_dmem_wen_ff) ? i_opsel_w : i_opsel_r;
 
     // MEM/WB Register
     always @(posedge i_clk) begin
@@ -130,16 +130,9 @@ module mem
             dmem_wen_ff      <= i_dmem_wen_ff;
             dmem_wdata_ff    <= o_dmem_wdata;
             dmem_wdata_ff1   <= dmem_wdata_ff;
-            // Compute raw (right-shifted to LSB) zero-extended read data for retire/logging.
-            // Use the pipelined mask from the previous cycle to select the correct bytes.
-            // This raw value will be sign/zero-extended for register writeback in WB.
-            dmem_rdata_ff    <= (dmem_mask_ff == 4'b0001) ? {24'b0, i_dmem_rdata[7:0]}   :
-                               (dmem_mask_ff == 4'b0010) ? {24'b0, i_dmem_rdata[15:8]}  :
-                               (dmem_mask_ff == 4'b0100) ? {24'b0, i_dmem_rdata[23:16]} :
-                               (dmem_mask_ff == 4'b1000) ? {24'b0, i_dmem_rdata[31:24]} :
-                               (dmem_mask_ff == 4'b0011) ? {16'b0, i_dmem_rdata[15:0]}  :
-                               (dmem_mask_ff == 4'b1100) ? {16'b0, i_dmem_rdata[31:16]} :
-                                                            i_dmem_rdata;
+            // For retire logging, provide the aligned word read from memory directly.
+            // The trace expects l[addr,mask]=aligned_word (not right-shifted).
+            dmem_rdata_ff    <= i_dmem_rdata;
             pc_ff            <= i_pc;
             nxt_pc_ff        <= i_nxt_pc;
         end
