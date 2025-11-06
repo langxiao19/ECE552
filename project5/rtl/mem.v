@@ -90,12 +90,13 @@ module mem
     wire [31:0]  dmem_rdata_if;
     wire [3:0]   dmem_mask_if;
 
-    // Drive the external memory enables from the MEM-stage (EX-registered) controls
-    // so address, mask, and enables all belong to the same instruction.
-    assign o_dmem_wen = i_dmem_wen_ff;
-    assign o_dmem_ren = i_dmem_ren_ff;
-    // Use EX-stage funct3 for both loads and stores to align with EX-computed address
-    assign opsel_if    = i_opsel_r;
+    // Drive the external memory enables from DE-stage controls (design baseline)
+    // and select opsel based on the active transaction to avoid DE/EX skew.
+    assign o_dmem_wen = i_dmem_wen;
+    assign o_dmem_ren = i_dmem_ren;
+    // Stores: use DE-stage funct3 (i_opsel_w) that accompanies write-enable.
+    // Loads:  use EX-stage funct3 (i_opsel_r) that aligns with EX-computed address.
+    assign opsel_if    = (o_dmem_wen) ? i_opsel_w : i_opsel_r;
 
     dmem dmem_if(
                 .i_opsel(opsel_if),
