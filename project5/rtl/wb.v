@@ -43,8 +43,17 @@ module wb
     output wire [31:0]  o_nxt_pc
 );
 
+// For loads, perform the appropriate sign/zero extension based on funct3.
+wire [2:0] wb_funct3 = i_inst[14:12];
+wire [31:0] load_ext = (wb_funct3 == 3'b000) ? {{24{i_dmem_rdata[7]}},   i_dmem_rdata[7:0]}   : // LB
+                       (wb_funct3 == 3'b001) ? {{16{i_dmem_rdata[15]}},  i_dmem_rdata[15:0]}  : // LH
+                       (wb_funct3 == 3'b010) ? i_dmem_rdata                                   : // LW
+                       (wb_funct3 == 3'b100) ? {24'b0,                  i_dmem_rdata[7:0]}   : // LBU
+                       (wb_funct3 == 3'b101) ? {16'b0,                  i_dmem_rdata[15:0]}  : // LHU
+                                                i_dmem_rdata;
+
 // Need to determine if we want to use ALU result or memory output
-assign o_res        =   (i_mem_reg) ?   i_dmem_rdata : i_res;
+assign o_res        =   (i_mem_reg) ?   load_ext : i_res;
 assign o_rd_waddr   =   i_rd_waddr;
 assign o_rd_wen     =   i_rd_wen;
 assign o_vld        =   (i_rst)     ?   1'b0         : i_vld;
