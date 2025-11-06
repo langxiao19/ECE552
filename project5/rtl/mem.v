@@ -80,23 +80,49 @@ module mem
     reg [31:0]   pc_ff;
     reg [31:0]   nxt_pc_ff;
 
-    // Memory handler (determines mask and aligns accesses)
-    wire [2:0]   opsel;
-    dmem dmem(.i_opsel(opsel),
+    // Memory handlers (determine mask and align accesses)
+    // 1) Interface instance drives the external dmem signals using decode-stage enables/opsel (design choice)
+    // 2) Retire instance computes the mask for the instruction currently in MEM stage (EX-stage opsel),
+    //    which we pipeline to WB for accurate retire logging independent of the next instruction.
+    wire [2:0]   opsel_if;
+    wire [31:0]  dmem_addr_if;
+    wire [31:0]  dmem_wdata_if;
+    wire [31:0]  dmem_rdata_if;
+    wire [3:0]   dmem_mask_if;
+
+    assign o_dmem_wen = i_dmem_wen;
+    assign o_dmem_ren = i_dmem_ren;
+    assign opsel_if    = (o_dmem_wen) ? i_opsel_w : i_opsel_r; // DE-stage selection for current memory transaction
+
+    dmem dmem_if(
+                .i_opsel(opsel_if),
                 .i_dmem_addr(i_dmem_addr),
                 .i_rs2_rdata(i_dmem_wdata),
                 .i_dmem_rdata(i_dmem_rdata),
-                .o_dmem_addr(o_dmem_addr),
-                .o_dmem_wdata(o_dmem_wdata),  // Write data is synchronous, so doesn't need pipeline
-                .o_dmem_rdata(o_dmem_rdata),
-                .o_dmem_mask(o_dmem_mask));
-    // Drive memory interface enables from current decode-stage controls (design choice),
-    // but ensure retire/logging uses the correctly pipelined mask below.
-    assign o_dmem_wen = i_dmem_wen;
-    assign o_dmem_ren = i_dmem_ren;
-    // Select opsel based on the same stage that drives the memory enables this cycle (DE stage)
-    // to ensure mask corresponds to the active memory transaction.
-    assign opsel      = (o_dmem_wen) ? i_opsel_w : i_opsel_r;
+                .o_dmem_addr(dmem_addr_if),
+                .o_dmem_wdata(dmem_wdata_if),  // Write data is synchronous, so doesn't need pipeline
+                .o_dmem_rdata(dmem_rdata_if),
+                .o_dmem_mask(dmem_mask_if));
+
+    assign o_dmem_addr  = dmem_addr_if;
+    assign o_dmem_wdata = dmem_wdata_if;
+    assign o_dmem_rdata = dmem_rdata_if;
+    assign o_dmem_mask  = dmem_mask_if;
+
+    // Retire-path mask computed strictly from the MEM-stage instruction (EX-stage opsel)
+    wire [3:0] dmem_mask_mem;
+    wire [31:0] _unused_addr_mem;
+    wire [31:0] _unused_wdata_mem;
+    wire [31:0] _unused_rdata_mem;
+    dmem dmem_ret(
+                .i_opsel(i_opsel_r),
+                .i_dmem_addr(i_dmem_addr),
+                .i_rs2_rdata(i_dmem_wdata),
+                .i_dmem_rdata(i_dmem_rdata),
+                .o_dmem_addr(_unused_addr_mem),
+                .o_dmem_wdata(_unused_wdata_mem),
+                .o_dmem_rdata(_unused_rdata_mem),
+                .o_dmem_mask(dmem_mask_mem));
 
     // MEM/WB Register
     always @(posedge i_clk) begin
@@ -120,11 +146,11 @@ module mem
             rs1_rdata_ff     <= i_rs1_rdata;
             rs2_rdata_ff     <= i_rs2_rdata;
             dmem_addr_ff     <= o_dmem_addr;
-            dmem_mask_ff     <= o_dmem_mask;
+            // Capture the MEM-stage instruction's mask for retire logging
+            dmem_mask_ff     <= dmem_mask_mem;
             // Pipeline the address/mask to align with the instruction in MEM/WB stage
             dmem_addr_ff1    <= dmem_addr_ff;
-            // Always use the previously computed mask for retire/logging to avoid
-            // mixing with the next EX-stage instruction's mask.
+            // Retire/logging mask is simply the MEM-stage mask registered one cycle later
             dmem_mask_ff1    <= dmem_mask_ff;
             dmem_ren_ff      <= i_dmem_ren_ff;
             dmem_wen_ff      <= i_dmem_wen_ff;
