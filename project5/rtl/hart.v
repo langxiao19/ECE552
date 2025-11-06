@@ -405,7 +405,7 @@ module hart #(
         .i_rs2_rdata(ex_rs2_rdata),
         .i_pc(ex_pc),
         .i_nxt_pc(ex_nxt_pc),
-        .i_opsel_w(de_opsel),
+        .i_opsel_w(ex_opsel),
         .i_opsel_r(ex_opsel),
         .i_rd_waddr(ex_rd_waddr),
         .i_rd_wen(ex_rd_wen),
