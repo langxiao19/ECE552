@@ -1,4 +1,4 @@
-`default_nettype none
+﻿`default_nettype none
 
 /**
 *   Program Counter Module
@@ -25,8 +25,6 @@ module pc #(
     input wire          i_jalr,
     // Asserts if processor needs to halt
     input wire          i_halt,
-    // Asserts if pipeline needs to stall (load-use hazard)
-    input wire          i_hold,
 
     /* Address Signals */
     // Immediate value used for Branch and Jump
@@ -51,9 +49,6 @@ reg  [31:0] curr_addr;
 always @(posedge i_clk) begin
     if (i_rst) begin
         curr_addr <= RESET_ADDR;
-    end
-    else if (i_hold) begin
-        curr_addr <= curr_addr;  // Hold PC on pipeline stall
     end
     else if (i_jal | i_jalr | br_vld)
         curr_addr <= nxt_addr + 3'd4;
