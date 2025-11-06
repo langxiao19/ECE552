@@ -94,9 +94,9 @@ module mem
     // but ensure retire/logging uses the correctly pipelined mask below.
     assign o_dmem_wen = i_dmem_wen;
     assign o_dmem_ren = i_dmem_ren;
-    // Select opsel aligned with the instruction in MEM stage using EX-stage latched enables
-    // to avoid mixing DE-stage control. Stores use write opsel, loads use read opsel.
-    assign opsel      = (i_dmem_wen_ff) ? i_opsel_w : i_opsel_r;
+    // Select opsel based on the same stage that drives the memory enables this cycle (DE stage)
+    // to ensure mask corresponds to the active memory transaction.
+    assign opsel      = (o_dmem_wen) ? i_opsel_w : i_opsel_r;
 
     // MEM/WB Register
     always @(posedge i_clk) begin
