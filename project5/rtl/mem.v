@@ -92,10 +92,10 @@ module mem
 
     assign o_dmem_wen = i_dmem_wen;
     assign o_dmem_ren = i_dmem_ren;
-    // Use EX-stage funct3 (i_opsel_r == ex_opsel) so the mask aligns with the
-    // EX-computed address for BOTH loads and stores. This keeps address and mask
-    // from the same instruction, avoiding DE/EX skew on stalls.
-    assign opsel_if    = i_opsel_r;
+    // Select opsel based on the type of transaction this cycle:
+    // - For stores, use DE-stage funct3 (i_opsel_w) to match DE-controlled write-enable
+    // - For loads, use EX-stage funct3 (i_opsel_r) to align with the EX-computed address
+    assign opsel_if    = (o_dmem_wen) ? i_opsel_w : i_opsel_r;
 
     dmem dmem_if(
                 .i_opsel(opsel_if),
