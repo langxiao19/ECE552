@@ -92,9 +92,10 @@ module mem
 
     assign o_dmem_wen = i_dmem_wen;
     assign o_dmem_ren = i_dmem_ren;
-    // Use DE-stage funct3 (i_opsel_w == de_opsel) for BOTH loads and stores so mask
-    // always corresponds to the instruction currently driving o_dmem_{ren,wen}.
-    assign opsel_if    = i_opsel_w;
+    // Use EX-stage funct3 (i_opsel_r == ex_opsel) so the mask aligns with the
+    // EX-computed address for BOTH loads and stores. This keeps address and mask
+    // from the same instruction, avoiding DE/EX skew on stalls.
+    assign opsel_if    = i_opsel_r;
 
     dmem dmem_if(
                 .i_opsel(opsel_if),
