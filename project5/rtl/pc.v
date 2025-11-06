@@ -73,6 +73,6 @@ assign nxt_addr         = (br_vld)          ? curr_addr + i_immediate_ex - 3'd4 
 /* Link output wire */
 assign o_imem_raddr = (i_jal | i_jalr | br_vld) ? nxt_addr : curr_addr;
 assign o_nxt_pc     = nxt_addr;
-assign o_flush      = br_vld | i_jal | i_jalr;  // Flush on branch or jump (registered signals)
+assign o_flush      = br_vld;  // Flush if branch valid
 
 endmodule

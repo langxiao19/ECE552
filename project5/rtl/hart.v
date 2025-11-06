@@ -1,4 +1,4 @@
-module hart #(
+﻿module hart #(
     // After reset, the program counter (PC) should be initialized to this
     // address and start executing instructions from there.
     parameter RESET_ADDR = 32'h00000000
@@ -214,6 +214,7 @@ module hart #(
     wire                    ex_mem_reg;
     wire                    ex_mem_read;
     wire                    ex_mem_write;
+    wire [2:0]              ex_opsel;
     wire [4:0]              ex_rd_waddr;
     wire                    ex_rd_wen;
     wire [31:0]             ex_dmem_addr;
@@ -226,7 +227,6 @@ module hart #(
     wire [31:0]             ex_rs2_rdata;
     wire [31:0]             ex_pc;
     wire [31:0]             ex_nxt_pc;
-    wire [2:0]              ex_opsel;
 
     // Memory
     wire                    mem_mem_reg;
@@ -246,7 +246,6 @@ module hart #(
     wire                    mem_dmem_ren;
     wire                    mem_dmem_wen;
     wire [31:0]             mem_dmem_wdata;
-    wire [31:0]             mem_dmem_rdata_ff;
     wire [31:0]             mem_pc;
     wire [31:0]             mem_nxt_pc;
 
@@ -278,8 +277,8 @@ module hart #(
         .i_slt(ex_slt),
         .i_opsel(de_opsel),
         .i_branch(de_branch),
-        .i_jal(de_jal_ff),
-        .i_jalr(de_jalr_ff),
+        .i_jal(de_jal),
+        .i_jalr(de_jalr),
         .i_halt(de_break),
         .i_hold(de_hold),
         .i_immediate_de(de_immediate),
@@ -378,6 +377,7 @@ module hart #(
         .o_mem_reg(ex_mem_reg),
         .o_mem_read(ex_mem_read),
         .o_mem_write(ex_mem_write),
+        .o_opsel(ex_opsel),
         .o_rd_waddr(ex_rd_waddr),
         .o_rd_wen(ex_rd_wen),
         .o_dmem_addr(ex_dmem_addr),
@@ -389,8 +389,7 @@ module hart #(
         .o_rs1_rdata(ex_rs1_rdata),
         .o_rs2_rdata(ex_rs2_rdata),
         .o_pc(ex_pc),
-        .o_nxt_pc(ex_nxt_pc),
-        .o_opsel(ex_opsel)
+        .o_nxt_pc(ex_nxt_pc)
     );
 
     // Memory stage
@@ -405,17 +404,14 @@ module hart #(
         .i_rs2_rdata(ex_rs2_rdata),
         .i_pc(ex_pc),
         .i_nxt_pc(ex_nxt_pc),
-        .i_opsel_w(de_opsel),
-        .i_opsel_r(ex_opsel),
+        .i_opsel(ex_opsel),
         .i_rd_waddr(ex_rd_waddr),
         .i_rd_wen(ex_rd_wen),
         .i_dmem_addr(ex_dmem_addr),
         .i_dmem_wdata(ex_dmem_wdata),
         .i_dmem_rdata(i_dmem_rdata),
-        .i_dmem_ren(de_mem_read),
-        .i_dmem_wen(de_mem_write),
-        .i_dmem_ren_ff(ex_mem_read),
-        .i_dmem_wen_ff(ex_mem_write),
+        .i_dmem_ren(ex_mem_read),
+        .i_dmem_wen(ex_mem_write),
         .i_mem_reg(ex_mem_reg),
         .i_res(ex_res_ff),
         .o_mem_reg(mem_mem_reg),
@@ -439,7 +435,6 @@ module hart #(
         .o_dmem_ren_ff(mem_dmem_ren),
         .o_dmem_wen_ff(mem_dmem_wen),
         .o_dmem_wdata_ff(mem_dmem_wdata),
-        .o_dmem_rdata_ff(mem_dmem_rdata_ff),
         .o_pc(mem_pc),
         .o_nxt_pc(mem_nxt_pc)
     );
@@ -448,7 +443,7 @@ module hart #(
     wb u_wb(
         .i_rst(i_rst),
         .i_mem_reg(mem_mem_reg),
-        .i_dmem_rdata(mem_dmem_rdata_ff),
+        .i_dmem_rdata(mem_dmem_rdata),
         .i_res(mem_res),
         .i_rd_waddr(mem_rd_waddr),
         .i_rd_wen(mem_rd_wen),
