@@ -92,7 +92,9 @@ module mem
 
     assign o_dmem_wen = i_dmem_wen;
     assign o_dmem_ren = i_dmem_ren;
-    assign opsel_if    = (o_dmem_wen) ? i_opsel_w : i_opsel_r; // DE-stage selection for current memory transaction
+    // Use DE-stage funct3 (i_opsel_w == de_opsel) for BOTH loads and stores so mask
+    // always corresponds to the instruction currently driving o_dmem_{ren,wen}.
+    assign opsel_if    = i_opsel_w;
 
     dmem dmem_if(
                 .i_opsel(opsel_if),
